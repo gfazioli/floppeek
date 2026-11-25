@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Floppeek</string>
+	<key>CFBundleExecutable</key>
+	<string>Floppeek</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.gfazioli.Floppeek</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Floppeek</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__BUILD__</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Floppeek is MIT-licensed. Amiga is a trademark of its owner; Floppeek is not affiliated with it.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<!--
+	  .adf has no system type. public.retro.adf is the identifier the Mac's Amiga
+	  apps already use (vAmiga and ADF.inder export it), so Floppeek imports the
+	  same one: whichever of them is installed, an .adf has one type, and the
+	  extensions below follow it. Conforms to public.data only, as vAmiga declares it.
+	-->
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>public.retro.adf</string>
+			<key>UTTypeDescription</key>
+			<string>Amiga Disk File</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>adf</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/x-adf</string>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

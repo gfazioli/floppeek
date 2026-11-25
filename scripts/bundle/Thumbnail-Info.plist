@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Floppeek Thumbnail</string>
+	<key>CFBundleExecutable</key>
+	<string>FloppeekThumbnail</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.gfazioli.Floppeek.Thumbnail</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>FloppeekThumbnail</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__BUILD__</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>QLSupportedContentTypes</key>
+			<array>
+				<string>public.retro.adf</string>
+			</array>
+			<key>QLThumbnailMinimumDimension</key>
+			<integer>16</integer>
+		</dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.quicklook.thumbnail</string>
+		<!-- The @objc name in Sources/FloppeekThumbnail/ThumbnailProvider.swift. -->
+		<key>NSExtensionPrincipalClass</key>
+		<string>FloppeekThumbnailProvider</string>
+	</dict>
+</dict>
+</plist>
