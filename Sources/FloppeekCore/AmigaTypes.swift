@@ -1,8 +1,9 @@
 import Foundation
 
 /// An AmigaDOS date: days since 1 January 1978, minutes since midnight and ticks
-/// (1/50 s) into the minute. It is wall-clock time with no zone, so it is read and
-/// formatted in UTC: what the Amiga's clock said is what is shown.
+/// (1/50 s) into the minute. It is wall-clock time with no zone, so it is turned
+/// into a calendar date by arithmetic alone: what the Amiga's clock said is what
+/// is shown, whatever zone the Mac is in.
 public struct AmigaDate: Equatable, Hashable, Sendable {
     public let days: UInt32
     public let minutes: UInt32
@@ -14,37 +15,38 @@ public struct AmigaDate: Equatable, Hashable, Sendable {
         self.ticks = ticks
     }
 
-    /// 1978-01-01T00:00:00Z as seconds since 1970.
-    static let epoch: TimeInterval = 252_460_800
-
-    /// The wall-clock moment as a `Date` in UTC; format it with a UTC calendar.
-    public var date: Date {
-        Date(timeIntervalSince1970: Self.epoch
-             + TimeInterval(days) * 86_400
-             + TimeInterval(minutes) * 60
-             + TimeInterval(ticks / 50))
+    /// The Gregorian date and time the three numbers stand for.
+    public struct Civil: Equatable, Sendable {
+        public let year, month, day, hour, minute, second: Int
     }
 
-    /// `dd.MM.yyyy HH:mm:ss.tt`, the ticks left over the second after the dot:
-    /// the form amitools' xdftool lists, which the tests compare against.
-    public var listingString: String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        let c = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-        return String(format: "%02d.%02d.%04d %02d:%02d:%02d.%02d",
-                      c.day ?? 0, c.month ?? 0, c.year ?? 0,
-                      c.hour ?? 0, c.minute ?? 0, c.second ?? 0, Int(ticks % 50))
+    public var civil: Civil {
+        let seconds = Int(minutes) * 60 + Int(ticks) / 50
+        let extraDays = seconds / 86_400 // a corrupt disk can store more minutes than a day has
+        let inDay = seconds % 86_400
+        // Days since 1970-01-01 (1978 is 2922 days later), then Howard Hinnant's
+        // civil_from_days.
+        let z = Int(days) + 2922 + extraDays + 719_468
+        let era = (z >= 0 ? z : z - 146_096) / 146_097
+        let doe = z - era * 146_097
+        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+        let mp = (5 * doy + 2) / 153
+        let day = doy - (153 * mp + 2) / 5 + 1
+        let month = mp < 10 ? mp + 3 : mp - 9
+        let year = yoe + era * 400 + (month <= 2 ? 1 : 0)
+        return Civil(year: year, month: month, day: day,
+                     hour: inDay / 3600, minute: inDay / 60 % 60, second: inDay % 60)
     }
+
+    private static let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
     /// `29-Feb-92 12:00:00`, as the AmigaDOS `List` command prints it.
     public var dosString: String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        let c = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-        let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        let month = months[max(0, min(11, (c.month ?? 1) - 1))]
+        let c = civil
         return String(format: "%02d-%@-%02d %02d:%02d:%02d",
-                      c.day ?? 0, month, (c.year ?? 0) % 100, c.hour ?? 0, c.minute ?? 0, c.second ?? 0)
+                      c.day, Self.months[c.month - 1], c.year % 100, c.hour, c.minute, c.second)
     }
 }
 
@@ -65,7 +67,7 @@ public struct Protection: Equatable, Hashable, Sendable {
     public var isScript: Bool { rawValue & 0x40 != 0 }
     public var isHold: Bool { rawValue & 0x80 != 0 }
 
-    /// `hsparwed`, a dash for each flag that is off, as `List` and xdftool print it.
+    /// `hsparwed`, a dash for each flag that is off, as `List` prints it.
     public var listingString: String {
         let letters: [(Bool, Character)] = [
             (isHold, "h"), (isScript, "s"), (isPure, "p"), (isArchived, "a"),
@@ -83,15 +85,9 @@ public struct DOSType: Equatable, Hashable, Sendable {
 
     /// Fast File System; otherwise the original (OFS), whose data blocks carry headers.
     public var isFFS: Bool { flags & 1 != 0 }
-    /// International mode: case-folds accented Latin-1 letters when hashing names.
-    /// The directory-cache modes imply it.
-    public var isInternational: Bool { flags >= 2 }
-    /// Directory caching (DOS\4, DOS\5): extra cache blocks, same headers.
-    public var hasDirectoryCache: Bool { flags == 4 || flags == 5 }
-    /// Long file names (DOS\6, DOS\7, OS 3.2): names past 30 characters.
-    public var hasLongNames: Bool { flags == 6 || flags == 7 }
 
-    /// "OFS", "FFS", "FFS INTL", "FFS DC", "FFS LNFS"…
+    /// "OFS", "FFS", "FFS INTL" (international case folding), "FFS DC" (directory
+    /// cache), "FFS LNFS" (long names, OS 3.2).
     public var name: String {
         let base = isFFS ? "FFS" : "OFS"
         switch flags {
@@ -102,9 +98,6 @@ public struct DOSType: Equatable, Hashable, Sendable {
         default: return "DOS\\\(flags)"
         }
     }
-
-    /// `DOS0`…`DOS7`, as AmigaDOS writes it.
-    public var tag: String { "DOS\(flags)" }
 }
 
 /// Floppy density, from the image size.

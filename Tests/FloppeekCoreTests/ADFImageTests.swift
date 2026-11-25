@@ -81,7 +81,7 @@ struct ADFImageTests {
         #expect(volume.density == .doubleDensity)
         #expect(volume.totalBlocks == 1760)
         #expect(volume.usedBlocks == 125) // xdftool info: used 125, free 1635
-        #expect(!image.hasBootCode)
+        #expect(image.volumeName == "Floppeek OFS")
     }
 
     @Test func ffsVolumeHasHashChains() throws {
@@ -148,11 +148,75 @@ struct ADFImageTests {
         #expect(Protection(rawValue: 0x0F).listingString == "--------")
     }
 
+    // MARK: Previews
+
+    @Test func listingInTheMannerOfList() throws {
+        let preview = try DiskPreview(url: Self.fixture("ofs"))
+        #expect(preview.summary == "880K · OFS · DD · 125 of 1760 blocks used (7%)")
+        #expect(preview.note == nil)
+        let text = preview.lines.map(\.text)
+        // The name column is 19 wide (the longest indented name, 18, plus one) and
+        // the size is right-aligned in 7, as List lays them out.
+        func row(_ name: String, _ size: String, _ rest: String) -> String {
+            name + String(repeating: " ", count: 19 - name.count)
+                + String(repeating: " ", count: 7 - size.count) + size + " " + rest
+        }
+        #expect(text.contains(row("ReadMe", "69", "----rw-- 02-Jan-90 03:04:05")))
+        #expect(text.contains(": Read me first"))
+        #expect(text.contains(row("  Startup-Sequence", "47", "----rwed 29-Feb-92 12:00:00")))
+        #expect(text.contains(row("  Keymaps", "Dir", "----rwed") + " " + (try Self.image("ofs").volume()
+            .flattened().first { $0.entry.name == "Keymaps" }!.entry.date.dosString)))
+        #expect(text.last == "6 files - 4 directories - 125 blocks used")
+        #expect(preview.lines.filter(\.highlighted).count == 5) // 4 directories and the totals
+    }
+
+    @Test func nonDOSPreviewShowsTheBootBlock() throws {
+        let preview = try DiskPreview(url: Self.fixture("ndos"))
+        guard case .nonDOS(bootable: false) = preview.content else { Issue.record("\(preview.content)"); return }
+        #expect(preview.lines.count == 16)
+        #expect(preview.lines[0].text.contains("............Not"))
+        #expect(preview.label == "ndos")
+    }
+
+    /// A DOS disk whose root block is gone is unreadable, not "a game that loads
+    /// itself": the preview says why instead of hiding the error.
+    @Test func damagedRootBlockIsUnreadable() throws {
+        var data = try Data(contentsOf: Self.fixture("ofs"))
+        data.replaceSubrange(880 * 512..<881 * 512, with: Data(count: 512))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("floppeek-damaged-\(UUID()).adf")
+        try data.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let preview = try DiskPreview(url: url)
+        guard case .unreadable(let reason) = preview.content else { Issue.record("\(preview.content)"); return }
+        #expect(reason == "block 880: the root block is not a root block")
+        #expect(try DiskPreview.label(for: url).hasPrefix("floppeek-damaged-"))
+    }
+
+    @Test func thumbnailLabelReadsTheRootBlockOnly() throws {
+        #expect(try DiskPreview.label(for: Self.fixture("ffs")) == "Floppeek FFS")
+        #expect(try DiskPreview.label(for: Self.fixture("ndos")) == "ndos")
+    }
+
+    // MARK: Dates
+
     @Test func dateString() {
         #expect(AmigaDate(days: 0, minutes: 0, ticks: 0).listingString == "01.01.1978 00:00:00.00")
         // 29 February 1992 at noon, plus 75 ticks: one second and 25 ticks.
         let leap = AmigaDate(days: 5172, minutes: 720, ticks: 75)
         #expect(leap.listingString == "29.02.1992 12:00:01.25")
         #expect(leap.dosString == "29-Feb-92 12:00:01")
+        // Past 2000 and past the 32-bit seconds of 2038: arithmetic, not time_t.
+        #expect(AmigaDate(days: 8035, minutes: 0, ticks: 0).dosString == "01-Jan-00 00:00:00")
+        #expect(AmigaDate(days: 22_280, minutes: 1, ticks: 0).listingString == "01.01.2039 00:01:00.00")
+    }
+}
+
+extension AmigaDate {
+    /// `dd.MM.yyyy HH:mm:ss.tt`, the ticks left over the second after the dot:
+    /// the form amitools' xdftool lists, which these tests compare against.
+    var listingString: String {
+        let c = civil
+        return String(format: "%02d.%02d.%04d %02d:%02d:%02d.%02d",
+                      c.day, c.month, c.year, c.hour, c.minute, c.second, Int(ticks % 50))
     }
 }

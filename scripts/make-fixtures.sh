@@ -84,6 +84,6 @@ D="$OUT/ffs-hd.adf"; fresh "$D"
 
 # Not a DOS disk: a boot block without "DOS", as game disks have.
 D="$OUT/ndos.adf"; fresh "$D"
-python3 -c 'import sys; b=bytearray(901120); b[0:4]=b"\x00\x00\x00\x00"; b[12:28]=b"Not a DOS disk!!"; open(sys.argv[1],"wb").write(bytes(b))' "$D"
+python3 -c 'import sys; b=bytearray(901120); b[12:28]=b"Not a DOS disk!!"; open(sys.argv[1],"wb").write(bytes(b))' "$D"
 
 ls -l "$OUT"

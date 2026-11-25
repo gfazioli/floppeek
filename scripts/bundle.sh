@@ -46,32 +46,32 @@ fi
 VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 BUILD="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 0)"
 
+# The extensions, each a SwiftPM product Floppeek<part>, a template
+# scripts/bundle/<part>-Info.plist and the bundle id com.gfazioli.Floppeek.<part>.
+PARTS=(Preview Thumbnail)
+
 swift build -c "$CONFIG" --package-path "$ROOT"
-PRODUCTS="$(swift build -c "$CONFIG" --package-path "$ROOT" --show-bin-path)"
+PRODUCTS="$(swift build -c "$CONFIG" --package-path "$ROOT" --show-bin-path)" # prints, builds nothing
 
 APP="$ROOT/build/Floppeek.app"
 pkill -f "$APP/Contents/PlugIns/" 2>/dev/null || true
 
-stamp() { # <template> <destination>
-    sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" "$1" > "$2"
-    plutil -lint -s "$2"
+# assemble <product> <bundle> <Info.plist template>: executable, stamped Info.plist, fonts.
+assemble() {
+    mkdir -p "$2/Contents/MacOS" "$2/Contents/Resources/Fonts"
+    cp -f "$PRODUCTS/$1" "$2/Contents/MacOS/$1"
+    sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" "$3" > "$2/Contents/Info.plist"
+    plutil -lint -s "$2/Contents/Info.plist"
+    cp -f "$ROOT/Resources/Fonts/"* "$2/Contents/Resources/Fonts/"
 }
 
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Fonts" "$APP/Contents/PlugIns"
-cp -f "$PRODUCTS/Floppeek" "$APP/Contents/MacOS/Floppeek"
-stamp "$ROOT/scripts/bundle/App-Info.plist" "$APP/Contents/Info.plist"
-cp -f "$ROOT/Resources/Fonts/"* "$APP/Contents/Resources/Fonts/"
-
-for part in Preview Thumbnail; do
-    EXT="$APP/Contents/PlugIns/Floppeek$part.appex"
-    mkdir -p "$EXT/Contents/MacOS" "$EXT/Contents/Resources/Fonts"
-    cp -f "$PRODUCTS/Floppeek$part" "$EXT/Contents/MacOS/Floppeek$part"
-    stamp "$ROOT/scripts/bundle/$part-Info.plist" "$EXT/Contents/Info.plist"
-    cp -f "$ROOT/Resources/Fonts/"* "$EXT/Contents/Resources/Fonts/"
+assemble Floppeek "$APP" "$ROOT/scripts/bundle/App-Info.plist"
+for part in "${PARTS[@]}"; do
+    assemble "Floppeek$part" "$APP/Contents/PlugIns/Floppeek$part.appex" "$ROOT/scripts/bundle/$part-Info.plist"
 done
 
 # Inside-out: each extension with its sandbox, then the app around them.
-for part in Preview Thumbnail; do
+for part in "${PARTS[@]}"; do
     codesign --force --options=runtime "$TIMESTAMP" \
         --entitlements "$ROOT/scripts/bundle/Extension.entitlements" \
         --sign "$IDENTITY" "$APP/Contents/PlugIns/Floppeek$part.appex"
@@ -86,6 +86,5 @@ if [ "$REGISTER" = 1 ]; then
     "$LSREGISTER" -f -R -trusted "$APP"
     qlmanage -r >/dev/null 2>&1 || true
     qlmanage -r cache >/dev/null 2>&1 || true
-    pluginkit -m -v -i com.gfazioli.Floppeek.Preview || true
-    pluginkit -m -v -i com.gfazioli.Floppeek.Thumbnail || true
+    for part in "${PARTS[@]}"; do pluginkit -m -v -i "com.gfazioli.Floppeek.$part" || true; done
 fi

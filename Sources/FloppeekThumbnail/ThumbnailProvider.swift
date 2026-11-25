@@ -1,4 +1,5 @@
 import AppKit
+import FloppeekCore
 import FloppeekUI
 import QuickLookThumbnailing
 
@@ -8,9 +9,11 @@ import QuickLookThumbnailing
 final class ThumbnailProvider: QLThumbnailProvider {
     override func provideThumbnail(for request: QLFileThumbnailRequest,
                                    _ handler: @escaping (QLThumbnailReply?, (any Error)?) -> Void) {
+        // The root block's name only: the Finder asks once per file in a window,
+        // and the directories are not needed for a label.
         let label: String
         do {
-            label = try DiskPreview(url: request.fileURL).label
+            label = try DiskPreview.label(for: request.fileURL)
         } catch {
             // Not a floppy image: let Quick Look draw its generic icon.
             handler(nil, error)
