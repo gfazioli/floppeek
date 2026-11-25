@@ -85,6 +85,8 @@ public struct DOSType: Equatable, Hashable, Sendable {
 
     /// Fast File System; otherwise the original (OFS), whose data blocks carry headers.
     public var isFFS: Bool { flags & 1 != 0 }
+    /// Long file names (DOS\6, DOS\7, OS 3.2): a different header layout.
+    public var hasLongNames: Bool { flags == 6 || flags == 7 }
 
     /// "OFS", "FFS", "FFS INTL" (international case folding), "FFS DC" (directory
     /// cache), "FFS LNFS" (long names, OS 3.2).

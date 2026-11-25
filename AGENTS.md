@@ -35,8 +35,10 @@ qlmanage -p <file.adf>                       # the preview, in a qlmanage window
 swift scripts/thumbnail.swift <file.adf> <out.png>   # the thumbnail, as the Finder asks for it
 ```
 
-Capture a preview with `../scripts/uiverify/uiv.sh shot qlmanage <out.png>`, never a
-screen rectangle.
+Capture a preview by its window id (`screencapture -l<id>`; in the macos-workspace
+checkout, `../scripts/uiverify/uiv.sh shot qlmanage <out.png>`), never a screen
+rectangle, which photographs whatever is in front. `scripts/bundle.sh --release`
+builds universal (arm64 and x86_64); local builds are arm64 only.
 
 ## Rules
 
@@ -56,6 +58,15 @@ file they preview and ask for nothing else.
 **Nothing from Commodore's or Amiga's trademarks goes into the app icon.** "Amiga" is
 used descriptively, with the non-affiliation line in NOTICE.md, the README and the
 app's window.
+
+**A DOS boot block does not mean a file system.** Kickstart boots only a boot block
+that says DOS with a valid checksum, so nearly every game and demo has one and no
+root block: that is `noFileSystem(dosBootBlock: true, bootable: true)`, never an
+error. The root block sits at 880 (DD) or 1760 (HD) whatever the image size: dumps
+with up to 84 cylinders keep their file system on the first 80.
+
+**Names on a disk are any Latin-1 bytes.** Everything shown goes through
+`printable` (control characters as `?`), or a line feed in a name fakes a line.
 
 ## Traps measured on 2026-11-25
 
@@ -80,6 +91,13 @@ app's window.
   mid-window. Vertical-only fixed that but clipped long names; the content's
   minimum frame set to the viewport (`GeometryReader`), aligned top-leading, keeps
   both axes and pins it.
+
+- **DOS\6 and DOS\7 (long names, OS 3.2) use another header layout**: read as the
+  others, every name came out blank and the date 01-Jan-78. They are `.unsupported`
+  until that layout is read and tested against an xdftool `DOS7` disk.
+
+A review on 2026-11-25 fuzzed the reader with 120,000 mutated fixtures (release
+build) and constructed worst cases: no crash, hang or out-of-range read.
 
 ## Fonts and licences
 

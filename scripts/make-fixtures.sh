@@ -82,7 +82,9 @@ D="$OUT/ffs-hd.adf"; fresh "$D"
 "$XDFTOOL" "$D" create type=adf_hd + format "Floppeek HD" ffs + write "$WORK/readme" ReadMe
 "$XDFTOOL" "$D" list > "${D%.adf}.list.txt"
 
-# Not a DOS disk: a boot block without "DOS", as game disks have.
+# Not a DOS disk: a boot block without "DOS". Most game disks are not this: they
+# carry a DOS boot block (Kickstart boots nothing else) and no root block, which
+# the tests build from this one by writing DOS\0 and a valid checksum.
 D="$OUT/ndos.adf"; fresh "$D"
 python3 -c 'import sys; b=bytearray(901120); b[12:28]=b"Not a DOS disk!!"; open(sys.argv[1],"wb").write(bytes(b))' "$D"
 

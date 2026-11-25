@@ -14,7 +14,8 @@ Topaz is Copyright (c) AmigaInc.; the TrueType version is Copyright (c) 2009 by 
 Trueschool and Divine Stylers. Released under the GNU GPL with the font exception
 (<https://www.gnu.org/licenses/gpl-faq.html#FontException>). Floppeek ships the file
 unmodified, beside its own MIT-licensed code, and uses it only to draw previews; the font
-file itself stays under the GPL-FE. The design rights in the original bitmap font are
+file itself stays under the GPL-FE, whose text ships beside it
+(`Resources/Fonts/COPYING-GPL-3.0.txt`, copied into the app and both extensions). The design rights in the original bitmap font are
 not settled; the Amiga Assembly Library's NOTICE.md records what is known:
 <https://github.com/gfazioli/amiga-assembly-library/blob/main/NOTICE.md>.
 

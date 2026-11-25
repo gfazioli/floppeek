@@ -13,10 +13,12 @@ public struct ListingLine: Identifiable, Equatable, Sendable {
 public struct DiskPreview: Sendable {
     public enum Content: Sendable {
         case dos(ADFVolume)
-        /// A game or demo disk: no file system, only what its boot block says.
-        case nonDOS(bootable: Bool)
-        /// The boot block says DOS but the file system cannot be read: why.
-        case unreadable(reason: String)
+        /// No AmigaDOS file system, only what the boot block says. Most game and
+        /// demo disks are this with a DOS boot block (Kickstart boots nothing else)
+        /// and a loader of their own; a disk whose root block is lost looks the same.
+        case noFileSystem(dosBootBlock: Bool, bootable: Bool)
+        /// A file system variant Floppeek does not read yet.
+        case unsupported(String)
     }
 
     public let fileName: String
@@ -35,10 +37,11 @@ public struct DiskPreview: Sendable {
         density = image.density
         do {
             content = .dos(try image.volume())
-        } catch ADFError.notDOS {
-            content = .nonDOS(bootable: image.isBootable)
+        } catch ADFError.unsupported(let what) {
+            content = .unsupported(what)
         } catch {
-            content = .unreadable(reason: Self.describe(error))
+            // `.notDOS`, or `.badBlock` for the root block: either way no file system.
+            content = .noFileSystem(dosBootBlock: image.dosType != nil, bootable: image.isBootable)
         }
 
         let size = density == .highDensity ? "1.76M" : "880K"
@@ -52,21 +55,23 @@ public struct DiskPreview: Sendable {
             summary = parts.joined(separator: " · ")
             note = nil
             lines = Listing.lines(for: volume)
-        case .nonDOS(let bootable):
-            summary = [size, density.rawValue, "not a DOS disk", bootable ? "bootable" : "not bootable"]
+        case .noFileSystem(let dosBootBlock, let bootable):
+            summary = [size, density.rawValue, "no file system", bootable ? "bootable" : "not bootable"]
                 .joined(separator: " · ")
-            note = "No AmigaDOS file system: a game or demo that loads itself. Boot block:"
+            note = dosBootBlock
+                ? "No AmigaDOS file system: a game or demo with its own loader, or a disk whose root block is lost. Boot block:"
+                : "Not an AmigaDOS disk: its boot block does not say DOS. Boot block:"
             lines = Listing.hexDump(image.bootBlock)
-        case .unreadable(let reason):
-            summary = [size, density.rawValue, image.dosType?.name ?? "DOS", "unreadable"].joined(separator: " · ")
-            note = "The boot block says DOS, but the file system cannot be read (\(reason)). Boot block:"
-            lines = Listing.hexDump(image.bootBlock)
+        case .unsupported(let what):
+            summary = [size, image.dosType?.name ?? "DOS", density.rawValue].joined(separator: " · ")
+            note = "Floppeek does not read disks with \(what) yet."
+            lines = []
         }
     }
 
     /// The name on the floppy's label: the volume name, or the file name without its extension.
     public var label: String {
-        if case .dos(let volume) = content, !volume.name.isEmpty { return volume.name }
+        if case .dos(let volume) = content, !volume.name.isEmpty { return volume.name.printable }
         return (fileName as NSString).deletingPathExtension
     }
 
@@ -74,15 +79,15 @@ public struct DiskPreview: Sendable {
     /// What the thumbnail asks for, once per file in a Finder window.
     public static func label(for url: URL) throws -> String {
         let name = try ADFImage(contentsOf: url).volumeName ?? ""
-        return name.isEmpty ? (url.lastPathComponent as NSString).deletingPathExtension : name
+        return name.isEmpty ? (url.lastPathComponent as NSString).deletingPathExtension : name.printable
     }
+}
 
-    static func describe(_ error: any Error) -> String {
-        switch error {
-        case ADFError.badBlock(let block, let why): "block \(block): \(why)"
-        case ADFError.unexpectedSize(let size): "\(size) bytes"
-        default: String(describing: error)
-        }
+extension String {
+    /// Control characters (C0, DEL, C1) shown as `?`: a name on a disk is any
+    /// Latin-1 bytes, and a line feed in one would fake a line of the listing.
+    var printable: String {
+        String(unicodeScalars.map { $0.value < 0x20 || (0x7F...0x9F).contains($0.value) ? "?" : Character($0) })
     }
 }
 
@@ -100,7 +105,7 @@ public enum Listing {
         var files = 0, directories = 0
         for (depth, entry) in rows {
             let indent = String(repeating: " ", count: depth * 2)
-            let name = indent + entry.name
+            let name = indent + entry.name.printable
             let size: String
             switch entry.kind {
             case .directory: size = "Dir"; directories += 1
@@ -111,8 +116,8 @@ public enum Listing {
                 + String(repeating: " ", count: max(0, 7 - size.count)) + size
                 + " " + entry.protection.listingString + " " + entry.date.dosString,
                 highlighted: entry.isDirectory)
-            if case .softLink(let target) = entry.kind { add(indent + "  -> " + target) }
-            if !entry.comment.isEmpty { add(indent + ": " + entry.comment) }
+            if case .softLink(let target) = entry.kind { add(indent + "  -> " + target.printable) }
+            if !entry.comment.isEmpty { add(indent + ": " + entry.comment.printable) }
         }
         if rows.isEmpty { add("(empty disk)") }
         var total = "\(files) file\(files == 1 ? "" : "s") - \(directories) director\(directories == 1 ? "y" : "ies")"

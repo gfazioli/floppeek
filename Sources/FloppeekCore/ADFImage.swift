@@ -9,6 +9,8 @@ public enum ADFError: Error, Equatable, Sendable {
     case notDOS
     /// A block the file system points at is not what it should be.
     case badBlock(UInt32, String)
+    /// A file system variant Floppeek does not read yet.
+    case unsupported(String)
 }
 
 /// One file, directory or link on a disk.
@@ -84,6 +86,10 @@ public struct ADFImage: Sendable {
     let data: Data
     public let blockCount: Int
     public let density: Density
+    /// The blocks the file system was formatted on: 1760 on DD, 3520 on HD. An image
+    /// dumped with extra cylinders (up to 84) keeps its file system on the first 80,
+    /// its root block at 880, and the rest is not in the bitmap.
+    var fileSystemBlocks: Int { density == .highDensity ? Self.hdBlocks : Self.ddBlocks }
 
     public init(data: Data) throws {
         guard data.count % Self.blockSize == 0 else { throw ADFError.unexpectedSize(data.count) }
@@ -130,14 +136,19 @@ public struct ADFImage: Sendable {
     /// The volume name from the root block alone, without reading the directories:
     /// all a thumbnail needs. Nil for a non-DOS disk or an unreadable root block.
     public var volumeName: String? {
-        guard dosType != nil, let root = try? rootBlock() else { return nil }
+        guard let dosType, !dosType.hasLongNames, let root = try? rootBlock() else { return nil }
         return root.bcplString(at: Offset.name, max: 30)
     }
 
-    /// Reads the whole directory tree. Throws `.notDOS` for a disk without a file
-    /// system and `.badBlock` when the root block is not one.
+    /// Reads the whole directory tree. Throws `.notDOS` for a disk whose boot block
+    /// does not say DOS, `.badBlock` when there is no root block (most game disks:
+    /// a DOS boot block, which Kickstart needs to boot them, and a loader of their
+    /// own), and `.unsupported` for the long-name file systems.
     public func volume() throws -> ADFVolume {
         guard let dosType else { throw ADFError.notDOS }
+        // DOS\6 and DOS\7 (OS 3.2) keep name and comment together and move the
+        // date: read with this layout they list blank names.
+        guard !dosType.hasLongNames else { throw ADFError.unsupported("long file names (\(dosType.name))") }
         let root = try rootBlock()
         var walk = TreeWalk(image: self, visited: [root.number])
         if !root.checksumIsValid { walk.problems.append("Root block \(root.number): bad checksum") }
@@ -147,7 +158,7 @@ public struct ADFImage: Sendable {
             name: root.bcplString(at: Offset.name, max: 30),
             dosType: dosType,
             density: density,
-            totalBlocks: blockCount,
+            totalBlocks: fileSystemBlocks,
             usedBlocks: used,
             modified: root.date(at: Offset.date),
             entries: entries,
@@ -164,7 +175,7 @@ public struct ADFImage: Sendable {
     }
 
     private func rootBlock() throws -> Block {
-        let root = try block(UInt32(blockCount / 2))
+        let root = try block(UInt32(fileSystemBlocks / 2))
         guard root.long(at: Offset.type) == BlockType.header,
               root.signedLong(at: Offset.secondaryType) == SecondaryType.root else {
             throw ADFError.badBlock(root.number, "the root block is not a root block")
@@ -309,7 +320,7 @@ public struct ADFImage: Sendable {
     private func usedBlocks(root: Block, problems: inout [String]) -> Int? {
         guard root.long(at: Offset.bitmapFlag) == 0xFFFF_FFFF else { return nil }
         let bitsPerBlock = (Self.blockSize / 4 - 1) * 32 // longword 0 is the checksum
-        let needed = blockCount - 2 // the boot blocks are not in the map
+        let needed = fileSystemBlocks - 2 // the boot blocks are not in the map
         var free = 0
         var counted = 0
         for page in 0..<25 where counted < needed {
@@ -326,7 +337,7 @@ public struct ADFImage: Sendable {
             problems.append("Bitmap covers \(counted) of \(needed) blocks")
             return nil
         }
-        return blockCount - free
+        return fileSystemBlocks - free
     }
 
     // MARK: Blocks

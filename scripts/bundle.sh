@@ -50,8 +50,12 @@ BUILD="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 0)"
 # scripts/bundle/<part>-Info.plist and the bundle id com.gfazioli.Floppeek.<part>.
 PARTS=(Preview Thumbnail)
 
-swift build -c "$CONFIG" --package-path "$ROOT"
-PRODUCTS="$(swift build -c "$CONFIG" --package-path "$ROOT" --show-bin-path)" # prints, builds nothing
+# A release runs on Intel Macs too: both slices. Local builds stay arm64, faster.
+ARCHS=()
+[ "$CONFIG" = release ] && ARCHS=(--arch arm64 --arch x86_64)
+# ${ARCHS[@]+…}: macOS's bash 3.2 calls an empty array unbound under set -u.
+swift build -c "$CONFIG" ${ARCHS[@]+"${ARCHS[@]}"} --package-path "$ROOT"
+PRODUCTS="$(swift build -c "$CONFIG" ${ARCHS[@]+"${ARCHS[@]}"} --package-path "$ROOT" --show-bin-path)" # prints, builds nothing
 
 APP="$ROOT/build/Floppeek.app"
 pkill -f "$APP/Contents/PlugIns/" 2>/dev/null || true

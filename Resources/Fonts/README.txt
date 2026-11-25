@@ -3,6 +3,9 @@ Topaz a600a1200a4000
 
 Files
   Topaz_a1200_v1.0.ttf    the font as its author released it, unmodified
+  COPYING-GPL-3.0.txt     the GNU GPL. The author names "GPL-FE" without a version,
+                          which the GPL lets a recipient read as any version; this
+                          is version 3, the canonical text from gnu.org
 
 From "Multi Platform Amiga Fonts" (v1.0, 2009-12-22) by TrueSchool Ascii:
   https://github.com/rewtnull/amigafonts

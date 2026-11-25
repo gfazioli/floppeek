@@ -172,24 +172,91 @@ struct ADFImageTests {
 
     @Test func nonDOSPreviewShowsTheBootBlock() throws {
         let preview = try DiskPreview(url: Self.fixture("ndos"))
-        guard case .nonDOS(bootable: false) = preview.content else { Issue.record("\(preview.content)"); return }
+        guard case .noFileSystem(dosBootBlock: false, bootable: false) = preview.content else {
+            Issue.record("\(preview.content)"); return
+        }
         #expect(preview.lines.count == 16)
         #expect(preview.lines[0].text.contains("............Not"))
         #expect(preview.label == "ndos")
     }
 
-    /// A DOS disk whose root block is gone is unreadable, not "a game that loads
-    /// itself": the preview says why instead of hiding the error.
-    @Test func damagedRootBlockIsUnreadable() throws {
-        var data = try Data(contentsOf: Self.fixture("ofs"))
-        data.replaceSubrange(880 * 512..<881 * 512, with: Data(count: 512))
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("floppeek-damaged-\(UUID()).adf")
+    // MARK: Disks as they come
+
+    /// Writes `data` to a temporary .adf, previews it, removes it.
+    static func preview(of data: Data, name: String = "case") throws -> DiskPreview {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("floppeek-\(name)-\(UUID()).adf")
         try data.write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
-        let preview = try DiskPreview(url: url)
-        guard case .unreadable(let reason) = preview.content else { Issue.record("\(preview.content)"); return }
-        #expect(reason == "block 880: the root block is not a root block")
-        #expect(try DiskPreview.label(for: url).hasPrefix("floppeek-damaged-"))
+        return try DiskPreview(url: url)
+    }
+
+    /// Writes a valid boot block checksum: ones'-complement of the sum with carry.
+    static func signBootBlock(_ data: inout Data) {
+        data.replaceSubrange(4..<8, with: [0, 0, 0, 0])
+        var sum: UInt32 = 0
+        for offset in stride(from: 0, to: 1024, by: 4) {
+            let word = data[offset..<offset + 4].reduce(UInt32(0)) { $0 << 8 | UInt32($1) }
+            let (s, overflow) = sum.addingReportingOverflow(word)
+            sum = overflow ? s &+ 1 : s
+        }
+        let checksum = ~sum
+        data.replaceSubrange(4..<8, with: [24, 16, 8, 0].map { UInt8(truncatingIfNeeded: checksum >> $0) })
+    }
+
+    /// The common game disk: a bootable DOS boot block and no file system. It is
+    /// not a broken DOS disk; the review of 2026-11-25 caught the preview saying so.
+    @Test func bootableTrackloaderHasNoFileSystem() throws {
+        var data = try Data(contentsOf: Self.fixture("ndos"))
+        data.replaceSubrange(0..<4, with: Array("DOS\0".utf8))
+        Self.signBootBlock(&data)
+        #expect(try ADFImage(data: data).isBootable)
+        let preview = try Self.preview(of: data)
+        guard case .noFileSystem(dosBootBlock: true, bootable: true) = preview.content else {
+            Issue.record("\(preview.content)"); return
+        }
+        #expect(preview.summary == "880K · DD · no file system · bootable")
+    }
+
+    /// A lost root block reads the same way: no file system, the boot block shown.
+    @Test func lostRootBlockHasNoFileSystem() throws {
+        var data = try Data(contentsOf: Self.fixture("ofs"))
+        data.replaceSubrange(880 * 512..<881 * 512, with: Data(count: 512))
+        let preview = try Self.preview(of: data, name: "lost-root")
+        guard case .noFileSystem(dosBootBlock: true, _) = preview.content else { Issue.record("\(preview.content)"); return }
+        #expect(preview.label.hasPrefix("floppeek-lost-root-"))
+    }
+
+    /// Dumped with 84 cylinders: the file system is still on the first 80.
+    @Test func extraCylindersKeepTheRootAt880() throws {
+        var data = try Data(contentsOf: Self.fixture("ffs"))
+        data.append(Data(count: 4 * 22 * 512))
+        let preview = try Self.preview(of: data, name: "84cyl")
+        guard case .dos(let volume) = preview.content else { Issue.record("\(preview.content)"); return }
+        #expect(volume.entries.count == 82)
+        #expect(volume.totalBlocks == 1760)
+        #expect(volume.usedBlocks == 367)
+        #expect(volume.problems.isEmpty)
+    }
+
+    /// Long names (DOS\7) are a different layout: say so, never list blank names.
+    @Test func longNameDisksAreUnsupported() throws {
+        var data = try Data(contentsOf: Self.fixture("ffs"))
+        data[3] = 7
+        let preview = try Self.preview(of: data)
+        guard case .unsupported(let what) = preview.content else { Issue.record("\(preview.content)"); return }
+        #expect(what == "long file names (FFS LNFS)")
+        #expect(preview.lines.isEmpty)
+        #expect(try ADFImage(data: data).volumeName == nil)
+    }
+
+    /// A line feed in a name must not fake a line of the listing.
+    @Test func controlCharactersInNamesAreShownAsQuestionMarks() throws {
+        var data = try Data(contentsOf: Self.fixture("ofs"))
+        let readMe = try #require(try ADFImage(data: data).volume().entries.first { $0.name == "ReadMe" })
+        data[Int(readMe.id) * 512 + 0x1B1 + 2] = 0x0A // "Re\nDMe"
+        let preview = try Self.preview(of: data)
+        #expect(preview.lines.allSatisfy { !$0.text.contains("\n") })
+        #expect(preview.lines.contains { $0.text.hasPrefix("Re?dMe ") })
     }
 
     @Test func thumbnailLabelReadsTheRootBlockOnly() throws {
