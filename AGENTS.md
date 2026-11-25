@@ -62,8 +62,10 @@ app's window.
 **A DOS boot block does not mean a file system.** Kickstart boots only a boot block
 that says DOS with a valid checksum, so nearly every game and demo has one and no
 root block: that is `noFileSystem(dosBootBlock: true, bootable: true)`, never an
-error. The root block sits at 880 (DD) or 1760 (HD) whatever the image size: dumps
-with up to 84 cylinders keep their file system on the first 80.
+error, and only a DOS boot block counts as bootable. The root block is looked for at
+880 (DD) or 1760 (HD) first: dumps with up to 84 cylinders keep their file system on
+the first 80. A disk formatted over all its cylinders has it in the middle of the
+image (`ffs-82cyl`), the second place looked.
 
 **Names on a disk are any Latin-1 bytes.** Everything shown goes through
 `printable` (control characters as `?`), or a line feed in a name fakes a line.

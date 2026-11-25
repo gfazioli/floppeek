@@ -86,10 +86,13 @@ public struct ADFImage: Sendable {
     let data: Data
     public let blockCount: Int
     public let density: Density
-    /// The blocks the file system was formatted on: 1760 on DD, 3520 on HD. An image
-    /// dumped with extra cylinders (up to 84) keeps its file system on the first 80,
-    /// its root block at 880, and the rest is not in the bitmap.
-    var fileSystemBlocks: Int { density == .highDensity ? Self.hdBlocks : Self.ddBlocks }
+    /// The blocks a file system is formatted on, most likely first: 1760 on DD, 3520
+    /// on HD. A standard disk dumped with extra cylinders (up to 84) keeps its root
+    /// block at 880 and its bitmap over 1760; a disk formatted over all of them
+    /// (xdftool chs=82,2,11) has its root in the middle of the image.
+    var formatCandidates: [Int] {
+        density == .highDensity ? [Self.hdBlocks] : (blockCount == Self.ddBlocks ? [blockCount] : [Self.ddBlocks, blockCount])
+    }
 
     public init(data: Data) throws {
         guard data.count % Self.blockSize == 0 else { throw ADFError.unexpectedSize(data.count) }
@@ -135,8 +138,9 @@ public struct ADFImage: Sendable {
 
     /// The volume name from the root block alone, without reading the directories:
     /// all a thumbnail needs. Nil for a non-DOS disk or an unreadable root block.
+    /// The long-name file systems keep the root block's name where the others do.
     public var volumeName: String? {
-        guard let dosType, !dosType.hasLongNames, let root = try? rootBlock() else { return nil }
+        guard dosType != nil, let (root, _) = try? rootBlock() else { return nil }
         return root.bcplString(at: Offset.name, max: 30)
     }
 
@@ -146,19 +150,20 @@ public struct ADFImage: Sendable {
     /// own), and `.unsupported` for the long-name file systems.
     public func volume() throws -> ADFVolume {
         guard let dosType else { throw ADFError.notDOS }
+        // No root block first: a game disk with a DOS\7 boot block is still a game disk.
+        let (root, formatted) = try rootBlock()
         // DOS\6 and DOS\7 (OS 3.2) keep name and comment together and move the
         // date: read with this layout they list blank names.
         guard !dosType.hasLongNames else { throw ADFError.unsupported("long file names (\(dosType.name))") }
-        let root = try rootBlock()
         var walk = TreeWalk(image: self, visited: [root.number])
         if !root.checksumIsValid { walk.problems.append("Root block \(root.number): bad checksum") }
         let entries = walk.directory(root, depth: 0)
-        let used = usedBlocks(root: root, problems: &walk.problems)
+        let used = usedBlocks(root: root, formatted: formatted, problems: &walk.problems)
         return ADFVolume(
             name: root.bcplString(at: Offset.name, max: 30),
             dosType: dosType,
             density: density,
-            totalBlocks: fileSystemBlocks,
+            totalBlocks: formatted,
             usedBlocks: used,
             modified: root.date(at: Offset.date),
             entries: entries,
@@ -174,13 +179,16 @@ public struct ADFImage: Sendable {
         }
     }
 
-    private func rootBlock() throws -> Block {
-        let root = try block(UInt32(fileSystemBlocks / 2))
-        guard root.long(at: Offset.type) == BlockType.header,
-              root.signedLong(at: Offset.secondaryType) == SecondaryType.root else {
-            throw ADFError.badBlock(root.number, "the root block is not a root block")
+    /// The root block and the number of blocks its file system was formatted on.
+    private func rootBlock() throws -> (Block, formatted: Int) {
+        for formatted in formatCandidates {
+            let root = try block(UInt32(formatted / 2))
+            if root.long(at: Offset.type) == BlockType.header,
+               root.signedLong(at: Offset.secondaryType) == SecondaryType.root {
+                return (root, formatted)
+            }
         }
-        return root
+        throw ADFError.badBlock(UInt32(formatCandidates[0] / 2), "the root block is not a root block")
     }
 
     // MARK: Directories
@@ -317,10 +325,10 @@ public struct ADFImage: Sendable {
 
     // MARK: Bitmap
 
-    private func usedBlocks(root: Block, problems: inout [String]) -> Int? {
+    private func usedBlocks(root: Block, formatted: Int, problems: inout [String]) -> Int? {
         guard root.long(at: Offset.bitmapFlag) == 0xFFFF_FFFF else { return nil }
         let bitsPerBlock = (Self.blockSize / 4 - 1) * 32 // longword 0 is the checksum
-        let needed = fileSystemBlocks - 2 // the boot blocks are not in the map
+        let needed = formatted - 2 // the boot blocks are not in the map
         var free = 0
         var counted = 0
         for page in 0..<25 where counted < needed {
@@ -337,7 +345,7 @@ public struct ADFImage: Sendable {
             problems.append("Bitmap covers \(counted) of \(needed) blocks")
             return nil
         }
-        return fileSystemBlocks - free
+        return formatted - free
     }
 
     // MARK: Blocks

@@ -82,6 +82,18 @@ D="$OUT/ffs-hd.adf"; fresh "$D"
 "$XDFTOOL" "$D" create type=adf_hd + format "Floppeek HD" ffs + write "$WORK/readme" ReadMe
 "$XDFTOOL" "$D" list > "${D%.adf}.list.txt"
 
+# FFS formatted over 82 cylinders (1804 blocks): the root at 902, not 880, and the
+# bitmap over all of them. Real dumps of 80-cylinder disks with extra cylinders
+# keep 880; the tests make those by appending zeros to ffs.adf.
+# xdftool ignores chs= for an .adf as it ignores size=, so the disk is made as an
+# .hdf with that geometry and copied: the bytes are the same layout. List it in the
+# same session: reopened, xdftool guesses the geometry from the size and looks for
+# the root at 896.
+D="$OUT/ffs-82cyl.adf"; fresh "$D"
+"$XDFTOOL" "$WORK/c82.hdf" create chs=82,2,11 + format "Floppeek 82" ffs + makedir Extra \
+    + write "$WORK/readme" Extra/ReadMe + write "$WORK/keymap" Last + list > "${D%.adf}.list.txt"
+cp "$WORK/c82.hdf" "$D"
+
 # Not a DOS disk: a boot block without "DOS". Most game disks are not this: they
 # carry a DOS boot block (Kickstart boots nothing else) and no root block, which
 # the tests build from this one by writing DOS\0 and a valid checksum.

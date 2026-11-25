@@ -24,6 +24,8 @@ public struct DiskPreview: Sendable {
     public let fileName: String
     public let density: Density
     public let content: Content
+    /// The root block's name, when there is a root block (long-name disks too).
+    private let volumeName: String?
     /// One line in the manner of AmigaDOS `Info`: "880K · OFS · DD · 125 of 1760 blocks used (7%)".
     public let summary: String
     /// A sentence under the summary when the listing needs explaining.
@@ -35,13 +37,16 @@ public struct DiskPreview: Sendable {
         let image = try ADFImage(contentsOf: url)
         fileName = url.lastPathComponent
         density = image.density
+        volumeName = image.volumeName
         do {
             content = .dos(try image.volume())
         } catch ADFError.unsupported(let what) {
             content = .unsupported(what)
         } catch {
             // `.notDOS`, or `.badBlock` for the root block: either way no file system.
-            content = .noFileSystem(dosBootBlock: image.dosType != nil, bootable: image.isBootable)
+            // Kickstart boots only a DOS boot block, whatever the checksum of another.
+            let dos = image.dosType != nil
+            content = .noFileSystem(dosBootBlock: dos, bootable: dos && image.isBootable)
         }
 
         let size = density == .highDensity ? "1.76M" : "880K"
@@ -71,7 +76,7 @@ public struct DiskPreview: Sendable {
 
     /// The name on the floppy's label: the volume name, or the file name without its extension.
     public var label: String {
-        if case .dos(let volume) = content, !volume.name.isEmpty { return volume.name.printable }
+        if let volumeName, !volumeName.isEmpty { return volumeName.printable }
         return (fileName as NSString).deletingPathExtension
     }
 

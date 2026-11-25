@@ -60,7 +60,7 @@ struct ADFImageTests {
         }
     }
 
-    @Test(arguments: ["ofs", "ffs", "ffs-hd"])
+    @Test(arguments: ["ofs", "ffs", "ffs-hd", "ffs-82cyl"])
     func matchesXdftoolListing(disk: String) throws {
         let volume = try Self.image(disk).volume()
         let expected = try Self.listing(disk)
@@ -246,7 +246,36 @@ struct ADFImageTests {
         guard case .unsupported(let what) = preview.content else { Issue.record("\(preview.content)"); return }
         #expect(what == "long file names (FFS LNFS)")
         #expect(preview.lines.isEmpty)
-        #expect(try ADFImage(data: data).volumeName == nil)
+        // The root block keeps its name where the other file systems do.
+        #expect(preview.label == "Floppeek FFS")
+    }
+
+    /// A long-name boot block with no root block is still a game disk.
+    @Test func longNameBootBlockWithoutRootHasNoFileSystem() throws {
+        var data = try Data(contentsOf: Self.fixture("ndos"))
+        data.replaceSubrange(0..<4, with: Array("DOS\u{7}".utf8))
+        Self.signBootBlock(&data)
+        let preview = try Self.preview(of: data)
+        guard case .noFileSystem(dosBootBlock: true, bootable: true) = preview.content else {
+            Issue.record("\(preview.content)"); return
+        }
+    }
+
+    /// Kickstart boots only a DOS boot block, whatever another's checksum says.
+    @Test func onlyADOSBootBlockIsBootable() throws {
+        let data = Data(repeating: 0xFF, count: 901_120)
+        #expect(try ADFImage(data: data).isBootable) // the checksum alone passes
+        let preview = try Self.preview(of: data)
+        guard case .noFileSystem(dosBootBlock: false, bootable: false) = preview.content else {
+            Issue.record("\(preview.content)"); return
+        }
+    }
+
+    /// Formatted over 82 cylinders: the root in the middle of the image, the bitmap over all of it.
+    @Test func fullyFormattedExtraCylinders() throws {
+        let volume = try Self.image("ffs-82cyl").volume()
+        #expect(volume.totalBlocks == 1804)
+        #expect(volume.problems.isEmpty)
     }
 
     /// A line feed in a name must not fake a line of the listing.
