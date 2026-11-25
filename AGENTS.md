@@ -8,13 +8,17 @@ Commodore 64 (.sid, maybe .d64). Open source, MIT.
 
 ## Layout
 
-- `FloppeekCore`: format readers, Foundation only. `ADFImage` reads OFS and FFS
-  (DD up to 84 cylinders, HD), boot block, hash chains, extension blocks, links and
-  the allocation bitmap, and never trusts a pointer: loops, out-of-disk blocks and
-  bad checksums become `ADFVolume.problems`, not crashes.
-- `FloppeekUI`: the preview view (`DiskPreviewView`, the listing in the manner of
-  AmigaDOS `List`), the thumbnail drawing (`FloppyIcon`), the Workbench 1.3 palette
-  and the Topaz font.
+- `FloppeekCore`: format readers and what a preview says, Foundation only, so the
+  tests read exactly what the view draws. `ADFImage` reads OFS and FFS (DD up to 84
+  cylinders, HD), boot block, hash chains, extension blocks, links and the
+  allocation bitmap, and never trusts a pointer: loops, out-of-disk blocks and bad
+  checksums become `ADFVolume.problems`, not crashes. `DiskPreview` decides DOS,
+  non-DOS or unreadable from `ADFError` and builds the lines (`Listing`, in the
+  manner of AmigaDOS `List`); `DiskPreview.label(for:)` reads the root block only,
+  for thumbnails.
+- `FloppeekUI`: the preview view (`DiskPreviewView`, the listing as one selectable
+  text), the thumbnail drawing (`FloppyIcon`), the Workbench 1.3 palette and the
+  Topaz font.
 - `FloppeekPreview`, `FloppeekThumbnail`: the two extensions, each an executable
   entering at `_NSExtensionMain` (Package.swift). Their principal classes have fixed
   Objective-C names that their Info.plists name.
@@ -73,7 +77,9 @@ app's window.
   `Resources/Fonts` into every bundle and `Topaz.name` falls back to the system
   monospaced font.
 - **A two-axis `ScrollView` centres content smaller than itself**: the listing floated
-  mid-window until the scroll became vertical only.
+  mid-window. Vertical-only fixed that but clipped long names; the content's
+  minimum frame set to the viewport (`GeometryReader`), aligned top-leading, keeps
+  both axes and pins it.
 
 ## Fonts and licences
 
