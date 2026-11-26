@@ -59,8 +59,8 @@ say "Pre-flight: Floppeek $VERSION ($MODE)"
 mkdir -p "$DIST"
 # The section of CHANGELOG.md under "## <version>", up to the next "## ".
 # GitHub keeps every newline of a release body as a line break, so the changelog's
-# wrapped lines are joined: a bullet or a paragraph becomes one line. (No code blocks
-# in the notes: their lines would be joined too.) Versions compare as strings: as
+# wrapped lines are joined: a bullet or a paragraph becomes one line. (No code blocks,
+# tables or nested bullets in the notes: they would be joined too.) Versions compare as strings: as
 # numbers, 1.10 would find "## 1.1".
 awk -v v="$VERSION" '$0 ~ "^## " { if (f) exit; if ($2 "" == v "") { f = 1; next } } f' "$ROOT/CHANGELOG.md" \
     | awk '/^[[:space:]]*$/ { if (line != "") print line; line = ""; print ""; next }
@@ -78,6 +78,10 @@ if [ "$MODE" = publish ]; then
     [ "$(git -C "$ROOT" rev-parse HEAD)" = "$(git -C "$ROOT" rev-parse origin/main)" ] \
         || die "main is not origin/main: pull or push first"
     ! git -C "$ROOT" rev-parse -q --verify "refs/tags/$TAG" >/dev/null || die "the tag $TAG exists already"
+    # gh must be able to do what publish asks of it, before ten minutes of notarizing
+    # and a public tag: a lapsed token would otherwise also read as "no Release yet".
+    gh auth status >/dev/null 2>&1 || die "gh is not signed in (gh auth login)"
+    [ "$(gh api "repos/$TAP" --jq .permissions.push 2>/dev/null)" = true ] || die "no push access to $TAP"
     ! gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || die "the GitHub Release $TAG exists already"
 fi
 
@@ -215,7 +219,7 @@ trap recover EXIT
 
 say "Tagging $TAG"
 git -C "$ROOT" tag -a "$TAG" -m "Floppeek $VERSION"
-git -C "$ROOT" push -q origin "$TAG"
+git -C "$ROOT" push -q origin "$TAG" || { git -C "$ROOT" tag -d "$TAG" >/dev/null; die "could not push $TAG"; }
 STEP=tag
 
 say "GitHub Release on $REPO"
@@ -225,7 +229,7 @@ STEP=release
 CHECK="$(mktemp -d)"
 gh release download "$TAG" -R "$REPO" -p "Floppeek-$VERSION.dmg" -D "$CHECK"
 REMOTE=$(shasum -a 256 "$CHECK/Floppeek-$VERSION.dmg" | cut -d' ' -f1)
-trash "$CHECK"
+trash "$CHECK" || true
 [ "$REMOTE" = "$SHA" ] || die "the DMG GitHub serves hashes to $REMOTE, not $SHA: no cask written"
 echo "  $(gh release view "$TAG" -R "$REPO" --json url --jq .url)"
 
@@ -237,9 +241,9 @@ sed -e "s/__VERSION__/$VERSION/" -e "s/__SHA256__/$SHA/" "$ROOT/scripts/floppeek
 git -C "$TAPDIR" add Casks/floppeek.rb
 git -C "$TAPDIR" commit -q -m "floppeek $VERSION"
 git -C "$TAPDIR" push -q origin HEAD
-echo "  $(git -C "$TAPDIR" log --oneline -1)"
-trash "$TAPDIR"
 STEP=done
+echo "  $(git -C "$TAPDIR" log --oneline -1)"
+trash "$TAPDIR" || true
 
 cat <<SUMMARY
 
