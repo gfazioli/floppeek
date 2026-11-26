@@ -1,0 +1,53 @@
+# Publishes docs/ to GitHub Pages as static files, with no generator in the path:
+# no Jekyll, no Liquid, nothing between the files in the repository and the files
+# served (octoscope's workflow, where a Liquid brace in a markdown file once failed
+# every publish for a day while the site silently served the old pages). A failed
+# deploy is a red run on the commit that caused it.
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, never cancelled half-way.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # An empty or missing docs/ would deploy an empty site over a working one.
+      - name: There is a site to publish
+        run: |
+          set -euo pipefail
+          test -f docs/index.html || { echo "::error::docs/index.html is missing"; exit 1; }
+          n=$(find docs -type f | wc -l | tr -d ' ')
+          [ "$n" -ge 10 ] || { echo "::error::only $n files under docs/"; exit 1; }
+          echo "publishing $n files"
+
+      - name: Upload docs/ verbatim
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: docs
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
