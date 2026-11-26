@@ -2,7 +2,7 @@
 #
 # icons.sh — render the app icon's masters into Brand/ from scripts/icon.swift.
 #
-#   scripts/icons.sh [concept]      # workbench (default), copper, pixel
+#   scripts/icons.sh
 #
 # Two masters, one drawing:
 #   Brand/app-icon-1024.png             the squircle at full bleed, transparent
@@ -20,12 +20,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONCEPT="${1:-workbench}"
-case "$CONCEPT" in
-    workbench|pixel) FILL="0.00000,0.33333,0.66667" ;;  # Workbench blue #0055AA
-    copper) FILL="0.00000,0.00000,0.13333" ;;           # Workbench black #000022
-    *) echo "icons.sh: unknown concept '$CONCEPT' (workbench, copper, pixel)" >&2; exit 2 ;;
-esac
+FILL="0.00000,0.33333,0.66667"   # Workbench blue #0055AA, the icon's ground
 OPT="/Applications/ImageOptim.app/Contents/Frameworks/ImageOptimGPL.framework/Versions/A/Resources"
 
 # Compiled once: interpreted, every call would compile it again (seconds each).
@@ -38,8 +33,8 @@ icon() { "$TOOL" "$@"; }
 
 mkdir -p "$ROOT/Brand/AppIcon.icon/Assets"
 FILES=("$ROOT/Brand/app-icon-1024.png" "$ROOT/Brand/AppIcon.icon/Assets/icon.png")
-icon "$CONCEPT" 1024 "${FILES[0]}"
-icon "$CONCEPT" 1024 "${FILES[1]}" --square
+icon 1024 "${FILES[0]}"
+icon 1024 "${FILES[1]}" --square
 cat > "$ROOT/Brand/AppIcon.icon/icon.json" <<JSON
 {
   "fill" : {
@@ -63,7 +58,7 @@ JSON
 
 mkdir -p "$ROOT/docs/icons"
 for s in 256 180 32; do
-    icon "$CONCEPT" "$s" "$ROOT/docs/icons/icon-$s.png"
+    icon "$s" "$ROOT/docs/icons/icon-$s.png"
     FILES+=("$ROOT/docs/icons/icon-$s.png")
 done
 
@@ -73,4 +68,3 @@ else
     echo "icons.sh: ImageOptim's oxipng not found; the icons are not compressed" >&2
 fi
 for f in "${FILES[@]}"; do echo "  ${f#"$ROOT/"}  $(stat -f %z "$f") bytes"; done
-echo "icons.sh: $CONCEPT"

@@ -28,8 +28,8 @@ Commodore 64 (.sid, maybe .d64). Open source, MIT.
   is checked universal, loses the rpaths the link leaves into Xcode and the Metal
   cryptex, and has each slice's SDK stamped (SwiftPM records the deployment target,
   15.0, and macOS would run the binary in 15's compatibility mode).
-- `Brand/`: the app icon's masters, drawn in code by `scripts/icon.swift` and written
-  by `scripts/icons.sh <concept>` (also `docs/icons/`); bundle.sh makes the `.icns`
+- `Brand/`: the app icon's masters (pixel art, chosen 2026-11-26), drawn in code by
+  `scripts/icon.swift` and written by `scripts/icons.sh` (also `docs/icons/`); bundle.sh makes the `.icns`
   and compiles `Brand/AppIcon.icon` into `Assets.car` for macOS 26+.
 - `scripts/release.sh`: the DMG and the release (below); `scripts/dmg/` is the DMG
   builder the other apps ship (dmgbuild, then a check that the image opens as the
@@ -49,7 +49,7 @@ swift scripts/thumbnail.swift <file.adf> <out.png>   # the thumbnail, as the Fin
 scripts/release.sh --dry-run                 # test, build, sign, notarize, DMG, Gatekeeper; publishes nothing
 scripts/release.sh --publish                 # the same, then tag, GitHub Release, cask
 XDFTOOL=<xdftool> scripts/screenshots/shoot.sh [--only finder|work|demo|app]
-scripts/icons.sh [workbench|copper|pixel]    # the icon's masters and the site's icons
+scripts/icons.sh                             # the icon's masters and the site's icons
 swift scripts/social.swift docs/social.png   # the share card, after icons and screenshots
 ```
 
