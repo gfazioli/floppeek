@@ -8,6 +8,10 @@
 	<string>Floppeek</string>
 	<key>CFBundleExecutable</key>
 	<string>Floppeek</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.gfazioli.Floppeek</string>
 	<key>CFBundleInfoDictionaryVersion</key>

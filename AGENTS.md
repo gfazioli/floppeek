@@ -24,7 +24,20 @@ Commodore 64 (.sid, maybe .d64). Open source, MIT.
   Objective-C names that their Info.plists name.
 - `Floppeek`: the host app, which exists so macOS registers the extensions.
 - `scripts/bundle.sh` wraps the three executables into `build/Floppeek.app`, signs it
-  inside-out and, with `--register`, registers it. No Xcode project.
+  inside-out and, with `--register`, registers it. No Xcode project. A release bundle
+  is checked universal, loses the rpaths the link leaves into Xcode and the Metal
+  cryptex, and has each slice's SDK stamped (SwiftPM records the deployment target,
+  15.0, and macOS would run the binary in 15's compatibility mode).
+- `Brand/`: the app icon's masters, drawn in code by `scripts/icon.swift` and written
+  by `scripts/icons.sh <concept>` (also `docs/icons/`); bundle.sh makes the `.icns`
+  and compiles `Brand/AppIcon.icon` into `Assets.car` for macOS 26+.
+- `scripts/release.sh`: the DMG and the release (below); `scripts/dmg/` is the DMG
+  builder the other apps ship (dmgbuild, then a check that the image opens as the
+  install window); `scripts/floppeek.rb` is the Homebrew cask's template.
+- `docs/`: the website, gfazioli.github.io/floppeek, published by
+  `.github/workflows/pages.yml` verbatim. `scripts/social.swift` draws its share card.
+- `scripts/screenshots/`: `disks.sh` writes the demo disks with xdftool, `shoot.sh`
+  takes `docs/screenshots/` by window id.
 
 ## Commands
 
@@ -33,6 +46,11 @@ swift test                                   # the reader against xdftool's own 
 scripts/bundle.sh --register                 # build/Floppeek.app, Developer ID, registered
 qlmanage -p <file.adf>                       # the preview, in a qlmanage window
 swift scripts/thumbnail.swift <file.adf> <out.png>   # the thumbnail, as the Finder asks for it
+scripts/release.sh --dry-run                 # test, build, sign, notarize, DMG, Gatekeeper; publishes nothing
+scripts/release.sh --publish                 # the same, then tag, GitHub Release, cask
+XDFTOOL=<xdftool> scripts/screenshots/shoot.sh [--only finder|work|demo|app]
+scripts/icons.sh [workbench|copper|pixel]    # the icon's masters and the site's icons
+swift scripts/social.swift docs/social.png   # the share card, after icons and screenshots
 ```
 
 Capture a preview by its window id (`screencapture -l<id>`; in the macos-workspace
@@ -70,6 +88,27 @@ image (`ffs-82cyl`), the second place looked.
 **Names on a disk are any Latin-1 bytes.** Everything shown goes through
 `printable` (control characters as `?`), or a line feed in a name fakes a line.
 
+**A release is `scripts/release.sh --publish` from a clean `main`**, never by hand.
+The version is `VERSION`, the notes are its `## <version>` section of `CHANGELOG.md`
+(no section, no release), the DMG goes on this repository's GitHub Release and the
+cask into `gfazioli/homebrew-tap` with the sha256 of the file GitHub serves. A dry run
+notarizes for real: Apple's answer is the step most likely to fail. No Sparkle: the
+app is opened once and never again, so an updater in it would rarely look; updates
+come through `brew upgrade` and the page. After a release, the portfolio's
+`refresh-site`.
+
+**The site is hand-written static HTML** (`docs/`), no generator. Topaz is served
+from `docs/fonts/` with its licence, never from Google Fonts. The Download button
+links only a `.dmg` the Releases API lists, never a URL built from a version; release
+notes are GitHub's own HTML (`application/vnd.github.html+json`). One `h1` per page,
+descriptions of 160 characters at most, `sitemap.xml` kept honest. `404.html` is
+served at any depth, so its URLs are absolute (`/floppeek/…`). The footer carries the
+sponsors wall, the donate button and the publisher line with Legal and Privacy: a new
+sponsor goes here as on every other wall.
+
+**Screenshots are scripted and show demo disks only** (`scripts/screenshots/`), never
+a real disk or this Mac's folders.
+
 ## Traps measured on 2026-11-25
 
 - **`qlmanage -t` does not test the thumbnail extension**: it takes the legacy
@@ -97,6 +136,21 @@ image (`ffs-82cyl`), the second place looked.
 - **DOS\6 and DOS\7 (long names, OS 3.2) use another header layout**: read as the
   others, every name came out blank and the date 01-Jan-78. They are `.unsupported`
   until that layout is read and tested against an xdftool `DOS7` disk.
+
+## Traps measured on 2026-11-26
+
+- **On macOS 27 the Finder applies neither AppleScript's icon view options nor a
+  `.DS_Store` written into a local folder it has opened before**: both left 64-point
+  icons in the default order, without an error. A fresh volume's `.DS_Store`, written
+  by dmgbuild, is honoured (the DMGs rely on it), so `shoot.sh` photographs the demo
+  disks on a throwaway disk image (`scripts/screenshots/window.py`).
+- **A local folder's Finder window shows the whole path in its path bar**, the home
+  folder's name included, with the toolbar hidden; a volume's root shows only the
+  volume.
+- **`qlmanage -p` titles its window `[DEBUG] <file>`**: the preview shots are cropped
+  inside the window frame.
+- **The release link leaves rpaths into Xcode's toolchain and the Metal cryptex**, and
+  SwiftPM records `sdk 15.0`; bundle.sh removes the first and stamps the second.
 
 A review on 2026-11-25 fuzzed the reader with 120,000 mutated fixtures (release
 build) and constructed worst cases: no crash, hang or out-of-range read.

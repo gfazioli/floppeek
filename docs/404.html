@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Page not found — Floppeek</title>
+    <meta name="robots" content="noindex">
+    <!-- Served for any missing path under /floppeek/, at any depth: every URL is absolute. -->
+    <link rel="icon" href="/floppeek/icons/icon-32.png" sizes="32x32" type="image/png">
+    <style>
+        @font-face { font-family: "Topaz"; src: url("/floppeek/fonts/Topaz_a1200_v1.0.ttf") format("truetype"); font-display: swap; }
+        html, body { margin: 0; height: 100%; background: #000; color: #ff2222; font: 20px/1.6 "Topaz", ui-monospace, Menlo, monospace; -webkit-font-smoothing: none; }
+        a.guru { display: block; margin: 0; padding: 0; color: inherit; text-decoration: none; min-height: 100%; }
+        .box {
+            margin: 0; padding: 18px 12px; text-align: center;
+            border: 8px solid #ff2222; animation: blink 1s steps(1, end) infinite;
+        }
+        @keyframes blink { 50% { border-color: #000; } }
+        @media (prefers-reduced-motion: reduce) { .box { animation: none; } }
+        .box p { margin: 0; }
+        main { display: block; }
+        h1 { font: inherit; margin: 0; }
+        .hint { color: #888; font-size: 16px; text-align: center; margin-top: 28px; }
+        a.guru:focus-visible .box { outline: 3px dashed #fff; outline-offset: -14px; }
+    </style>
+</head>
+<body>
+    <main>
+        <a class="guru" href="/floppeek/">
+            <div class="box">
+                <h1>Software Failure. This page is not on the disk.</h1>
+                <p>Press the left mouse button to continue.</p>
+                <p>Guru Meditation #00000404.F10PPEEK</p>
+            </div>
+            <p class="hint">Click anywhere, or press Return, to go back to Floppeek.</p>
+        </a>
+    </main>
+</body>
+</html>
