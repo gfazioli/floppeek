@@ -1,15 +1,17 @@
 // social.swift — the page's share card (Open Graph, 1200 x 630), from the app icon,
 // a real preview screenshot and the Topaz font.
 //
-//   swift scripts/social.swift docs/social.png     (from the repository root)
+//   swift scripts/social.swift [out.png]     (default: docs/social.png in the repository)
 //
 // Run scripts/icons.sh and scripts/screenshots/shoot.sh first: it reads their output.
 
 import AppKit
 import CoreText
 
-let out = CommandLine.arguments.count == 2 ? CommandLine.arguments[1] : "docs/social.png"
-let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+// The repository, from this file's path, as in icon.swift: any working directory works.
+let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+let out = CommandLine.arguments.count == 2
+    ? URL(fileURLWithPath: CommandLine.arguments[1]) : root.appendingPathComponent("docs/social.png")
 let srgb = CGColorSpace(name: CGColorSpace.sRGB)!
 func rgb(_ hex: UInt32, _ a: CGFloat = 1) -> CGColor {
     CGColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
@@ -67,7 +69,7 @@ ctx.setFillColor(rgb(0x000022)); ctx.fill(frame.offsetBy(dx: 12, dy: -12))
 ctx.fill(frame.insetBy(dx: -4, dy: -4))
 ctx.draw(shot, in: frame)
 
-let dest = CGImageDestinationCreateWithURL(root.appendingPathComponent(out) as CFURL, "public.png" as CFString, 1, nil)!
+let dest = CGImageDestinationCreateWithURL(out as CFURL, "public.png" as CFString, 1, nil)!
 CGImageDestinationAddImage(dest, ctx.makeImage()!, nil)
-guard CGImageDestinationFinalize(dest) else { fputs("social.swift: cannot write \(out)\n", stderr); exit(1) }
-print("social.swift: \(out)")
+guard CGImageDestinationFinalize(dest) else { fputs("social.swift: cannot write \(out.path)\n", stderr); exit(1) }
+print("social.swift: \(out.path) (optimise it with ImageOptim)")

@@ -55,21 +55,20 @@
         .hero-shot { margin-top: 6px; }
         .hero-shot img { width: 100%; }
 
-        /* ---------- Scroller: a demo's greetings line ---------- */
-        .scroller { background: var(--black); border-bottom: 3px solid var(--black); overflow: hidden; white-space: nowrap; padding: 10px 0 14px; }
-        .scroller-track { display: inline-flex; animation: scroll 60s linear infinite; }
+        /* ---------- Scroller: a demo's greetings line ----------
+           Served as one still, centred line. site.js doubles it and sets data-loop,
+           unless the visitor asked for reduced motion: then the line scrolls, and
+           translating the track by half of its width loops it seamlessly. */
+        .scroller { background: var(--black); border-bottom: 3px solid var(--black); overflow: hidden; padding: 10px var(--gutter) 14px; text-align: center; }
         .scroller-track span {
-            padding-right: 4em; font-size: 26px;
+            font-size: 20px;
             background: linear-gradient(90deg, #ff6ec7, #ffe066, #9bff7a, #6ee7ff, #ff9f43, #ff6ec7);
             -webkit-background-clip: text; background-clip: text; color: transparent;
         }
+        .scroller[data-loop] { white-space: nowrap; text-align: left; padding: 10px 0 14px; }
+        .scroller[data-loop] .scroller-track { display: inline-flex; animation: scroll 60s linear infinite; }
+        .scroller[data-loop] .scroller-track span { padding-right: 4em; font-size: 26px; }
         @keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-        @media (prefers-reduced-motion: reduce) {
-            .scroller { white-space: normal; text-align: center; padding: 10px var(--gutter) 14px; }
-            .scroller-track { animation: none; display: block; }
-            .scroller-track span + span { display: none; }
-            .scroller-track span { padding: 0; font-size: 20px; }
-        }
 
         /* ---------- Features ---------- */
         .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 32px; }
@@ -100,7 +99,7 @@
         .release .body h2::before { content: none; }
         .release .body ul { padding-left: 1.3em; }
         .release .body code { background: #e6ebf3; color: var(--black); }
-        .release .assets { margin-top: 10px; font-size: 14px; }
+        .release ~ p { margin-top: 24px; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -124,7 +123,7 @@
                 <div class="window-title" aria-hidden="true"><span class="gadget close"></span><span class="label">Floppeek</span><span class="drag"></span><span class="gadget depth"></span></div>
                 <div class="window-body">
                     <div class="hero-head">
-                        <img src="icons/icon-512.png" alt="Floppeek's icon: a floppy disk with an eye on its label" width="112" height="112">
+                        <img src="icons/icon-256.png" alt="Floppeek's icon: a floppy disk with an eye on its label" width="112" height="112">
                         <div>
                             <h1 id="title">Floppeek</h1>
                             <p class="tagline">Quick Look for Amiga disk images</p>
@@ -144,14 +143,14 @@
                     <p class="release-meta" id="release-meta">Free and open source · macOS 15 or later · Apple silicon and Intel</p>
                     <div class="brew">
                         <code id="brew-command">brew install --cask gfazioli/tap/floppeek</code>
-                        <button type="button" id="brew-copy" aria-label="Copy the Homebrew command">Copy</button>
+                        <button type="button" id="brew-copy" aria-label="Copy the Homebrew command" hidden>Copy</button>
                     </div>
                 </div>
             </div>
             <div class="window shot hero-shot">
                 <div class="window-title" aria-hidden="true"><span class="gadget close"></span><span class="label">Amiga Disks</span><span class="drag"></span><span class="gadget depth"></span></div>
                 <div class="window-body">
-                    <img src="screenshots/finder.png" alt="A Finder window of six Amiga disk images, each shown as a blue floppy with its volume name on the label" width="1240" height="940">
+                    <img src="screenshots/finder.png" fetchpriority="high" alt="A Finder window of six Amiga disk images, each shown as a blue floppy with its volume name on the label" width="1240" height="940">
                 </div>
             </div>
         </section>
@@ -159,7 +158,6 @@
         <div class="copper" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
         <div class="scroller" aria-hidden="true">
             <div class="scroller-track">
-                <span>FLOPPEEK ... PRESS SPACE ON ANY .ADF IN THE FINDER ... OFS AND FFS, DOUBLE AND HIGH DENSITY, GAMES AND DEMOS TOO ... FREE AND OPEN SOURCE ... GREETINGS TO EVERYONE WHO STILL KEEPS A BOX OF DISKS ... COMING NEXT: IFF PICTURES, TRACKER MODULES, COMMODORE 64 ...</span>
                 <span>FLOPPEEK ... PRESS SPACE ON ANY .ADF IN THE FINDER ... OFS AND FFS, DOUBLE AND HIGH DENSITY, GAMES AND DEMOS TOO ... FREE AND OPEN SOURCE ... GREETINGS TO EVERYONE WHO STILL KEEPS A BOX OF DISKS ... COMING NEXT: IFF PICTURES, TRACKER MODULES, COMMODORE 64 ...</span>
             </div>
         </div>
@@ -259,11 +257,11 @@
                 <div>
                     <div class="sponsor-wall">
                         <a class="sponsor-item" href="https://github.com/kastov" target="_blank" rel="noopener noreferrer">
-                            <img class="sponsor-avatar" src="https://github.com/kastov.png" alt="kastov" loading="lazy" width="64" height="64">
+                            <img class="sponsor-avatar" src="https://github.com/kastov.png?size=128" alt="kastov" loading="lazy" width="64" height="64">
                             <span>kastov</span>
                         </a>
                         <a class="sponsor-item" href="https://github.com/guimazza" target="_blank" rel="noopener noreferrer">
-                            <img class="sponsor-avatar" src="https://github.com/guimazza.png" alt="guimazza" loading="lazy" width="64" height="64">
+                            <img class="sponsor-avatar" src="https://github.com/guimazza.png?size=128" alt="guimazza" loading="lazy" width="64" height="64">
                             <span>guimazza</span>
                         </a>
                         <a class="sponsor-item" href="https://github.com/sponsors/gfazioli" target="_blank" rel="noopener noreferrer">

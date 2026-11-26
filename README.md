@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/icons/icon-512.png" alt="Floppeek's icon: a floppy disk with an eye on its label" width="128" />
+  <img src="docs/icons/icon-256.png" alt="Floppeek's icon: a floppy disk with an eye on its label" width="128" />
 
   <h1>Floppeek</h1>
 
