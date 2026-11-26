@@ -1,7 +1,9 @@
 // social.swift — the page's share card (Open Graph, 1200 x 630), from the app icon,
-// a real preview screenshot and the Topaz font.
+// a real preview screenshot and the Topaz font; with --github, the repository's social
+// preview, the 1280 x 640 GitHub asks for in Settings, the same card on a wider screen.
 //
-//   swift scripts/social.swift [out.png]     (default: docs/social.png in the repository)
+//   swift scripts/social.swift [out.png]            (default: docs/social.png)
+//   swift scripts/social.swift --github [out.png]   (default: Brand/github-social-preview-1280x640.png)
 //
 // Run scripts/icons.sh and scripts/screenshots/shoot.sh first: it reads their output.
 
@@ -10,8 +12,10 @@ import CoreText
 
 // The repository, from this file's path, as in icon.swift: any working directory works.
 let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-let out = CommandLine.arguments.count == 2
-    ? URL(fileURLWithPath: CommandLine.arguments[1]) : root.appendingPathComponent("docs/social.png")
+let args = Array(CommandLine.arguments.dropFirst())
+let github = args.contains("--github")
+let out = args.first(where: { $0 != "--github" }).map { URL(fileURLWithPath: $0) }
+    ?? root.appendingPathComponent(github ? "Brand/github-social-preview-1280x640.png" : "docs/social.png")
 let srgb = CGColorSpace(name: CGColorSpace.sRGB)!
 func rgb(_ hex: UInt32, _ a: CGFloat = 1) -> CGColor {
     CGColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
@@ -29,7 +33,7 @@ CTFontManagerRegisterFontsForURL(fontURL, .process, nil)
 let topaz = (CTFontManagerCreateFontDescriptorsFromURL(fontURL) as? [CTFontDescriptor])?.first
     .flatMap { CTFontDescriptorCopyAttribute($0, kCTFontNameAttribute) as? String } ?? "Menlo"
 
-let W = 1200, H = 630
+let (W, H) = github ? (1280, 640) : (1200, 630)
 let ctx = CGContext(data: nil, width: W, height: H, bitsPerComponent: 8, bytesPerRow: 0, space: srgb,
                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
 
@@ -53,6 +57,9 @@ ctx.setFillColor(rgb(0x000022)); ctx.fill(CGRect(x: 0, y: H - 44, width: W, heig
 bar(CGFloat(H) - 12, 0xFF9F43, 0x5C1A00); bar(CGFloat(H) - 32, 0x6EE7FF, 0x05265E)
 bar(32, 0xFF6EC7, 0x4A0A55); bar(12, 0x9BFF7A, 0x0B4A16)
 
+// The screen fills the canvas; what is on it is laid out for 1200 x 630, centred.
+ctx.translateBy(x: CGFloat(W - 1200) / 2, y: CGFloat(H - 630) / 2)
+
 // Left: the icon, the name, what it does.
 ctx.draw(image("Brand/app-icon-1024.png"), in: CGRect(x: 64, y: 340, width: 200, height: 200))
 text("Floppeek", 92, rgb(0xFFFFFF), x: 60, baseline: 238)
@@ -64,7 +71,7 @@ text("macOS · free and open source", 24, rgb(0xFFFFFF, 0.85), x: 64, baseline: 
 // with a hard shadow, centred between the copper bars.
 let shot = image("docs/screenshots/preview-work-disk.png")
 let shotHeight = 600 * CGFloat(shot.height) / CGFloat(shot.width)
-let frame = CGRect(x: 548, y: (CGFloat(H) - shotHeight) / 2, width: 600, height: shotHeight)
+let frame = CGRect(x: 548, y: (630 - shotHeight) / 2, width: 600, height: shotHeight)
 ctx.setFillColor(rgb(0x000022)); ctx.fill(frame.offsetBy(dx: 12, dy: -12))
 ctx.fill(frame.insetBy(dx: -4, dy: -4))
 ctx.draw(shot, in: frame)
