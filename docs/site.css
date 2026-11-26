@@ -15,7 +15,7 @@
     --black: #000022;
     --white: #ffffff;
     --orange: #ff8800;
-    --grey: #aab3c2;
+    --grey: #d3dae6;   /* 5.2:1 on the blue, 14.6:1 on the black */
     --topaz: "Topaz", ui-monospace, "SF Mono", Menlo, monospace;
     --gutter: clamp(16px, 4vw, 40px);
     color-scheme: dark;

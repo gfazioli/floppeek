@@ -94,12 +94,17 @@ if [ ! -f "$ICON_OUT/AppIcon.icns" ] || [ "$ROOT/Brand/app-icon-1024.png" -nt "$
 fi
 cp -f "$ICON_OUT/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 if ACTOOL=$(xcrun --find actool 2>/dev/null); then
-    if [ ! -f "$ICON_OUT/Assets.car" ] || [ -n "$(find "$ROOT/Brand/AppIcon.icon" -newer "$ICON_OUT/Assets.car")" ]; then
-        "$ACTOOL" "$ROOT/Brand/AppIcon.icon" --compile "$ICON_OUT" --platform macosx \
+    # A directory of its own: actool writes an AppIcon.icns of its own beside
+    # Assets.car (Apple's grid, inset, 256 px at most), which in $ICON_OUT replaced the
+    # full-bleed one above for every later build. Only Assets.car is taken from it.
+    CAR="$ICON_OUT/actool"
+    if [ ! -f "$CAR/Assets.car" ] || [ -n "$(find "$ROOT/Brand/AppIcon.icon" -newer "$CAR/Assets.car")" ]; then
+        mkdir -p "$CAR"
+        "$ACTOOL" "$ROOT/Brand/AppIcon.icon" --compile "$CAR" --platform macosx \
             --minimum-deployment-target 15.0 --app-icon AppIcon \
-            --output-partial-info-plist "$ICON_OUT/partial.plist" --errors >/dev/null
+            --output-partial-info-plist "$CAR/partial.plist" --errors >/dev/null
     fi
-    cp -f "$ICON_OUT/Assets.car" "$APP/Contents/Resources/Assets.car"
+    cp -f "$CAR/Assets.car" "$APP/Contents/Resources/Assets.car"
 elif [ "$CONFIG" = release ]; then
     echo "bundle.sh: no actool (Xcode missing?): a release would ship macOS 26+ the plated icon" >&2
     exit 1
