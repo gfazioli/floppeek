@@ -79,20 +79,26 @@ for part in "${PARTS[@]}"; do EXECUTABLES+=("$APP/Contents/PlugIns/Floppeek$part
 # The icon, from the masters scripts/icons.sh renders into Brand/: an .icns for
 # macOS 15, and Assets.car compiled from Brand/AppIcon.icon for 26 and later, which
 # insets a legacy .icns on a pale plate of its own (Lancetta measured it). On 26+
-# Assets.car wins; below 26 the .icns is all there is.
-ICONSET="$ROOT/.build/AppIcon.iconset"
-mkdir -p "$ICONSET" "$APP/Contents/Resources"
-for s in 16 32 128 256 512; do
-    sips -z $s $s "$ROOT/Brand/app-icon-1024.png" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
-    d=$((s * 2)); sips -z $d $d "$ROOT/Brand/app-icon-1024.png" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
-done
-iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+# Assets.car wins; below 26 the .icns is all there is. Both are kept in .build and
+# made again only when a master is newer.
+ICON_OUT="$ROOT/.build/appicon"
+mkdir -p "$ICON_OUT" "$APP/Contents/Resources"
+if [ ! -f "$ICON_OUT/AppIcon.icns" ] || [ "$ROOT/Brand/app-icon-1024.png" -nt "$ICON_OUT/AppIcon.icns" ]; then
+    ICONSET="$ICON_OUT/AppIcon.iconset"
+    mkdir -p "$ICONSET"
+    for s in 16 32 128 256 512; do
+        sips -z $s $s "$ROOT/Brand/app-icon-1024.png" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+        d=$((s * 2)); sips -z $d $d "$ROOT/Brand/app-icon-1024.png" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+    done
+    iconutil -c icns "$ICONSET" -o "$ICON_OUT/AppIcon.icns"
+fi
+cp -f "$ICON_OUT/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 if ACTOOL=$(xcrun --find actool 2>/dev/null); then
-    ICON_OUT="$ROOT/.build/appicon"
-    mkdir -p "$ICON_OUT"
-    "$ACTOOL" "$ROOT/Brand/AppIcon.icon" --compile "$ICON_OUT" --platform macosx \
-        --minimum-deployment-target 15.0 --app-icon AppIcon \
-        --output-partial-info-plist "$ICON_OUT/partial.plist" --errors >/dev/null
+    if [ ! -f "$ICON_OUT/Assets.car" ] || [ -n "$(find "$ROOT/Brand/AppIcon.icon" -newer "$ICON_OUT/Assets.car")" ]; then
+        "$ACTOOL" "$ROOT/Brand/AppIcon.icon" --compile "$ICON_OUT" --platform macosx \
+            --minimum-deployment-target 15.0 --app-icon AppIcon \
+            --output-partial-info-plist "$ICON_OUT/partial.plist" --errors >/dev/null
+    fi
     cp -f "$ICON_OUT/Assets.car" "$APP/Contents/Resources/Assets.car"
 elif [ "$CONFIG" = release ]; then
     echo "bundle.sh: no actool (Xcode missing?): a release would ship macOS 26+ the plated icon" >&2
@@ -102,11 +108,12 @@ fi
 if [ "$CONFIG" = release ]; then
     # Universal or nothing, checked on what is in the bundle: an arm64-only download
     # does not open on the Intel Macs macOS 15 still runs on, and nothing else says so.
-    # And the rpaths the release link leaves pointing into this Mac (Xcode's toolchain,
-    # the Metal cryptex): nothing resolves through them (every dylib is in /usr/lib or
-    # a system framework), so a developer's paths are not shipped to strangers.
+    # And no rpath into this Mac: the release link leaves Xcode's toolchain and the
+    # Metal cryptex, and every dylib resolves in /usr/lib or a system framework, so any
+    # absolute rpath outside those goes, and the check after says none is left.
     # `sort -u`: otool lists every slice's commands, install_name_tool removes a path
     # from all slices at once, and a second removal fails.
+    rpaths() { otool -l "$1" | awk '/LC_RPATH/{f=1} f&&/ path /{print $2; f=0}' | sort -u; }
     for exe in "${EXECUTABLES[@]}"; do
         archs=" $(lipo -archs "$exe") "
         for arch in arm64 x86_64; do
@@ -114,12 +121,11 @@ if [ "$CONFIG" = release ]; then
                 *) echo "bundle.sh: $(basename "$exe") has no $arch slice (got:$archs)" >&2; exit 1 ;;
             esac
         done
-        otool -l "$exe" | awk '/LC_RPATH/{f=1} f&&/ path /{print $2; f=0}' | sort -u | while read -r rp; do
-            case "$rp" in
-                /Applications/Xcode*|/var/run/com.apple.security.cryptexd/*|/Library/Developer/*)
-                    install_name_tool -delete_rpath "$rp" "$exe" ;;
-            esac
+        rpaths "$exe" | while read -r rp; do
+            case "$rp" in @*|/usr/lib/*|/System/*) ;; *) install_name_tool -delete_rpath "$rp" "$exe" ;; esac
         done
+        left=$(rpaths "$exe" | grep -v -E '^(@|/usr/lib/|/System/)' || true)
+        [ -z "$left" ] || { echo "bundle.sh: $(basename "$exe") still has rpaths into this Mac: $left" >&2; exit 1; }
     done
 fi
 
@@ -129,22 +135,34 @@ fi
 # number said 27). The build ran a moment ago in this script with the selected Xcode,
 # so the selected SDK is the one linked. Rewritten before signing (vtool breaks a
 # signature), each slice keeping its own deployment target and the linker's tool entry,
-# then read back.
+# then read back. (Lancetta measured that `swift build` does not pass the SDK down to
+# the link however it is set, so the record is corrected after it.)
 SDK=$(xcrun --sdk macosx --show-sdk-version)
-for exe in "${EXECUTABLES[@]}"; do
-    for arch in $(lipo -archs "$exe"); do
-        minos=$(otool -arch "$arch" -l "$exe" | awk '/LC_BUILD_VERSION/{f=1} f&&/ minos /{if (!n++) print $2; f=0}')
-        tools=()
-        for entry in $(otool -arch "$arch" -l "$exe" \
-                       | awk '/cmd LC_BUILD_VERSION/{f=1; next} /^Load command/{f=0}
-                              f&&$1=="tool"{t=$2} f&&$1=="version"&&t!=""{print t ":" $2; t=""}'); do
-            tools+=(-tool "${entry%%:*}" "${entry#*:}")
-        done
-        xcrun vtool -arch "$arch" -set-build-version macos "$minos" "$SDK" ${tools[@]+"${tools[@]}"} \
-            -replace -output "$exe" "$exe" 2>/dev/null
-        recorded=$(otool -arch "$arch" -l "$exe" | awk '/LC_BUILD_VERSION/{f=1} f&&/ sdk /{print $2; f=0}')
-        [ "$recorded" = "$SDK" ] || { echo "bundle.sh: $(basename "$exe") $arch records sdk $recorded, not $SDK" >&2; exit 1; }
+stamp_sdk() { # <executable> <arch>
+    local exe="$1"
+    local arch="$2"
+    local minos
+    local entry
+    local out
+    local recorded
+    local tools=()
+    minos=$(otool -arch "$arch" -l "$exe" | awk '/LC_BUILD_VERSION/{f=1} f&&/ minos /{if (!n++) print $2; f=0}')
+    for entry in $(otool -arch "$arch" -l "$exe" \
+                   | awk '/cmd LC_BUILD_VERSION/{f=1; next} /^Load command/{f=0}
+                          f&&$1=="tool"{t=$2} f&&$1=="version"&&t!=""{print t ":" $2; t=""}'); do
+        tools+=(-tool "${entry%%:*}" "${entry#*:}")
     done
+    # On success vtool only warns that the signature is now invalid (signing follows);
+    # on a failure its words are the explanation, so they are shown.
+    if ! out=$(xcrun vtool -arch "$arch" -set-build-version macos "$minos" "$SDK" ${tools[@]+"${tools[@]}"} \
+               -replace -output "$exe" "$exe" 2>&1); then
+        echo "bundle.sh: vtool failed on $(basename "$exe") $arch: $out" >&2; exit 1
+    fi
+    recorded=$(otool -arch "$arch" -l "$exe" | awk '/LC_BUILD_VERSION/{f=1} f&&/ sdk /{print $2; f=0}')
+    [ "$recorded" = "$SDK" ] || { echo "bundle.sh: $(basename "$exe") $arch records sdk $recorded, not $SDK" >&2; exit 1; }
+}
+for exe in "${EXECUTABLES[@]}"; do
+    for arch in $(lipo -archs "$exe"); do stamp_sdk "$exe" "$arch"; done
 done
 
 # Inside-out: each extension with its sandbox, then the app around them.

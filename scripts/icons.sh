@@ -12,7 +12,7 @@
 #                                       plate under anything transparent, so this layer
 #                                       has no corners to fill (Lancetta measured the
 #                                       white frame a squircle-on-clear layer draws)
-# and docs/ gets the site's icons when there is a docs/ (the page, the favicon).
+# and docs/icons/ the site's: 256 (the page, the README), 180 (touch), 32 (the tab).
 #
 # Compressed with ImageOptim's own oxipng, called out of the app bundle (lossless:
 # the icon's gradients must not band).
@@ -28,8 +28,13 @@ case "$CONCEPT" in
 esac
 OPT="/Applications/ImageOptim.app/Contents/Frameworks/ImageOptimGPL.framework/Versions/A/Resources"
 
-# icon.swift reads the Topaz font relative to the working directory.
-icon() { ( cd "$ROOT" && swift scripts/icon.swift "$@" ); }
+# Compiled once: interpreted, every call would compile it again (seconds each).
+TOOL="$ROOT/.build/icon-tool"
+if [ ! -x "$TOOL" ] || [ "$ROOT/scripts/icon.swift" -nt "$TOOL" ]; then
+    mkdir -p "$ROOT/.build"
+    swiftc -O -o "$TOOL" "$ROOT/scripts/icon.swift"
+fi
+icon() { "$TOOL" "$@"; }
 
 mkdir -p "$ROOT/Brand/AppIcon.icon/Assets"
 FILES=("$ROOT/Brand/app-icon-1024.png" "$ROOT/Brand/AppIcon.icon/Assets/icon.png")
@@ -56,13 +61,11 @@ cat > "$ROOT/Brand/AppIcon.icon/icon.json" <<JSON
 }
 JSON
 
-if [ -d "$ROOT/docs" ]; then
-    mkdir -p "$ROOT/docs/icons"
-    for s in 512 180 32; do
-        icon "$CONCEPT" "$s" "$ROOT/docs/icons/icon-$s.png"
-        FILES+=("$ROOT/docs/icons/icon-$s.png")
-    done
-fi
+mkdir -p "$ROOT/docs/icons"
+for s in 256 180 32; do
+    icon "$CONCEPT" "$s" "$ROOT/docs/icons/icon-$s.png"
+    FILES+=("$ROOT/docs/icons/icon-$s.png")
+done
 
 if [ -x "$OPT/oxipng" ]; then
     "$OPT/oxipng" -o max --strip safe -q "${FILES[@]}"

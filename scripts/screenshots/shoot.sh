@@ -28,23 +28,38 @@ want() { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
 mkdir -p "$OUT"
 
 # Which build answers: the one pluginkit names is the one the captures show.
+APP=""
 for part in Preview Thumbnail; do
     line=$(pluginkit -m -v -i "com.gfazioli.Floppeek.$part" | head -1)
     [ -n "$line" ] || { echo "shoot.sh: Floppeek $part is not registered (scripts/bundle.sh --register)" >&2; exit 1; }
     echo "  $part: ${line##*$'\t'}"
+    APP="${APP:-$(echo "$line" | sed -E 's|.*\t(/.*\.app)/Contents/PlugIns/.*|\1|')}"
 done
-APP="$(pluginkit -m -v -i com.gfazioli.Floppeek.Preview | head -1 | sed -E 's|.*\t(/.*\.app)/Contents/PlugIns/.*|\1|')"
+
+# Captures until two in a row are the same picture, so a shot never catches a window
+# still filling in (generic icons before the thumbnails, an empty preview), and never
+# waits longer than it has to. <app> <out.png> [window title]
+settle() {
+    local previous=""
+    local now
+    local i
+    for i in $(seq 1 30); do
+        sleep 0.7
+        "$UIV" shot "$@" >/dev/null || continue
+        now=$(shasum -a 256 "$2" | cut -d' ' -f1)
+        # Not before the third: the Finder can show its generic icons for over a second.
+        if [ "$i" -ge 3 ] && [ "$now" = "$previous" ]; then echo "  settled after $i captures: ${2#"$ROOT/"}"; return 0; fi
+        previous=$now
+    done
+    echo "shoot.sh: $1's window never settled" >&2
+    return 1
+}
 
 "$ROOT/scripts/screenshots/disks.sh" "$DISKS" >/dev/null
 
 if want finder; then
-    # The window is written into the folder's .DS_Store, as dmgbuild writes a DMG's:
-    # on macOS 27 the Finder answers AppleScript's icon size and arrangement without an
-    # error and applies neither (measured here, and by create-dmg on the DMGs). No
-    # toolbar, sidebar or path bar: they show this Mac's folders and its home's name.
-    # The tools are the DMG builder's environment (scripts/dmg/build.sh installs it).
-    # So the window is a volume's, built by dmgbuild from scripts/screenshots/window.py
-    # (why: that file's header), in the DMG builder's environment.
+    # The window is a throwaway volume's, laid out by dmgbuild (why: window.py's header),
+    # with the DMG builder's own environment.
     DMGBUILD=$(ls -d "$HOME"/Library/Caches/com.gfazioli.Floppeek.release-tools/dmgbuild-*/bin/dmgbuild 2>/dev/null | tail -1)
     [ -n "$DMGBUILD" ] || { echo "shoot.sh: no dmgbuild; run scripts/release.sh --dry-run once" >&2; exit 1; }
     VOLUME="/Volumes/Amiga Disks"
@@ -58,37 +73,36 @@ if want finder; then
     qlmanage -r cache >/dev/null 2>&1 || true
     WID=$(osascript -e 'tell application "Finder" to open disk "Amiga Disks"' \
                     -e 'tell application "Finder" to return id of front window')
-    sleep 6   # the Finder asks the thumbnail extension for each disk
-    "$UIV" shot Finder "$OUT/finder.png" "Amiga Disks"
+    settle Finder "$OUT/finder.png" "Amiga Disks"   # the thumbnails arrive one by one
     osascript -e "tell application \"Finder\" to close window id $WID"
     hdiutil detach "$VOLUME" -quiet
     trap - EXIT
 fi
 
 # qlmanage titles its window "[DEBUG] <file>": the capture is cropped to the preview
-# itself, inside the window's title bar and rounded frame (2x pixels).
+# itself, inside the title bar and the rounded frame. The insets are measured on a
+# Retina capture of the 760 x 560 preview (PreviewViewController), whose window shot
+# is 1540 x 1206 pixels; any other size means other insets, so it stops there.
 CROP="$(dirname "$UIV")/crop"
 preview() { # <disk> <out>
     qlmanage -p "$DISKS/$1" >/dev/null 2>&1 &
     local pid=$!
-    sleep 4
     local raw="$ROOT/build/screenshots/raw-$2"
-    "$UIV" shot qlmanage "$raw"
+    local size
+    settle qlmanage "$raw"
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
-    local w h
-    w=$(sips -g pixelWidth "$raw" | awk '/pixelWidth/{print $2}')
-    h=$(sips -g pixelHeight "$raw" | awk '/pixelHeight/{print $2}')
+    size=$(sips -g pixelWidth -g pixelHeight "$raw" | awk '/pixel/{printf "%s ", $2}')
+    [ "$size" = "1540 1206 " ] || { echo "shoot.sh: the preview window is ${size}px, not 1540 x 1206: measure the crop again" >&2; exit 1; }
     [ ! -e "$OUT/$2" ] || trash "$OUT/$2"
-    "$CROP" "$raw" "$OUT/$2" 20 92 $((w - 40)) $((h - 112))
+    "$CROP" "$raw" "$OUT/$2" 20 92 1500 1094
 }
 want work && preview "Work Disk.adf" preview-work-disk.png
 want demo && preview "Starfield Demo.adf" preview-demo.png
 
 if want app; then
     open -n "$APP"
-    sleep 3
-    "$UIV" shot Floppeek "$OUT/app.png"
+    settle Floppeek "$OUT/app.png"
     osascript -e 'tell application id "com.gfazioli.Floppeek" to quit'
 fi
 

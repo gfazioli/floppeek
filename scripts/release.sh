@@ -11,7 +11,7 @@
 #
 # The version is VERSION's; the notes are its section of CHANGELOG.md (`## 0.1.0`),
 # and a publish without one stops before anything leaves this Mac. Writes
-# build/dist/Floppeek-<version>.dmg and build/dist/release.json (version, sha256, size).
+# build/dist/Floppeek-<version>.dmg and prints its size and sha256.
 #
 # There is no Sparkle: the app is opened once and then never again (the extensions
 # are what runs), so an updater inside it would rarely get the chance to look.
@@ -88,9 +88,14 @@ if [ -z "$NOTARY_PROFILE" ]; then
     done
 fi
 [ -n "$NOTARY_PROFILE" ] || die "no working notarytool profile (a locked screen hides them all: unlock, wait a minute, retry)"
-# A profile is an Apple ID, a team and an app-specific password, with no bundle id in
-# it: a sibling app's works, and saying which one is used keeps it findable.
+# A profile carries no bundle id, so a sibling app's works; the line says which.
 echo "  notary:   $NOTARY_PROFILE"
+
+# The site serves its own copy of the font and its licence (docs/ is published as
+# it is, so it cannot point outside itself): the copies must be the app's.
+for f in Topaz_a1200_v1.0.ttf COPYING-GPL-3.0.txt; do
+    cmp -s "$ROOT/Resources/Fonts/$f" "$ROOT/docs/fonts/$f" || die "docs/fonts/$f differs from Resources/Fonts/$f"
+done
 
 DMG_BACKGROUND="$ROOT/scripts/dmg-background.tiff"
 [ -f "$DMG_BACKGROUND" ] || die "no $DMG_BACKGROUND (macos-workspace scripts/dmg-background/render.sh Floppeek <repo>)"
@@ -101,7 +106,7 @@ if ! swift test --package-path "$ROOT" > "$DIST/test.log" 2>&1; then
     tail -20 "$DIST/test.log" >&2
     die "the tests fail (build/dist/test.log)"
 fi
-grep -E 'Test run with [0-9]+ tests' "$DIST/test.log" | tail -1 | sed 's/^/  /'
+{ grep -E 'Test run with [0-9]+ tests' "$DIST/test.log" || true; } | tail -1 | sed 's/^/  /'
 
 say "Building, bundling, signing (universal, secure timestamp)"
 "$ROOT/scripts/bundle.sh" --release --identity "$IDENTITY"
@@ -161,8 +166,6 @@ spctl --assess --type install "$DMG" 2>/dev/null || die "Gatekeeper rejects the 
 
 SHA=$(shasum -a 256 "$DMG" | cut -d' ' -f1)
 SIZE=$(stat -f%z "$DMG")
-printf '{\n  "version": "%s",\n  "dmg": "%s",\n  "sha256": "%s",\n  "size": %s,\n  "minMacOS": "%s"\n}\n' \
-    "$VERSION" "$DMG" "$SHA" "$SIZE" "$MIN_MACOS" > "$DIST/release.json"
 
 if [ "$MODE" = dry ]; then
     cat <<SUMMARY
@@ -175,9 +178,27 @@ SUMMARY
 fi
 
 # ── Publish ──────────────────────────────────────────────────────────────────
+# Three public steps in order: the tag, the Release, the cask. The pre-flight refuses
+# an existing tag or Release, so a run that stops between them cannot simply be run
+# again: on the way out it says what is published and what is left to do by hand.
+STEP=""
+recover() {
+    local status=$?
+    [ "$status" -ne 0 ] || return 0
+    case "$STEP" in
+        tag) echo "release.sh: the tag $TAG is pushed and there is no Release. Retry with:" >&2
+             echo "  gh release create $TAG '$DMG' -R $REPO --verify-tag --title 'Floppeek $VERSION' --notes-file '$NOTES'" >&2
+             echo "or take the tag back: git push origin :refs/tags/$TAG && git tag -d $TAG" >&2 ;;
+        release) echo "release.sh: the Release $TAG is out and the cask is not. Write Casks/floppeek.rb in $TAP" >&2
+                 echo "from scripts/floppeek.rb with version $VERSION and sha256 $SHA." >&2 ;;
+    esac
+}
+trap recover EXIT
+
 say "Tagging $TAG"
 git -C "$ROOT" tag -a "$TAG" -m "Floppeek $VERSION"
 git -C "$ROOT" push -q origin "$TAG"
+STEP=tag
 
 say "GitHub Release on $REPO"
 gh release create "$TAG" "$DMG" -R "$REPO" --verify-tag --title "Floppeek $VERSION" --notes-file "$NOTES"
@@ -188,6 +209,7 @@ REMOTE=$(shasum -a 256 "$CHECK/Floppeek-$VERSION.dmg" | cut -d' ' -f1)
 trash "$CHECK"
 [ "$REMOTE" = "$SHA" ] || die "the DMG GitHub serves hashes to $REMOTE, not $SHA: no cask written"
 echo "  $(gh release view "$TAG" -R "$REPO" --json url --jq .url)"
+STEP=release
 
 say "Cask in $TAP"
 TAPDIR="$(mktemp -d)"
@@ -199,6 +221,7 @@ git -C "$TAPDIR" commit -q -m "floppeek $VERSION"
 git -C "$TAPDIR" push -q origin HEAD
 echo "  $(git -C "$TAPDIR" log --oneline -1)"
 trash "$TAPDIR"
+STEP=done
 
 cat <<SUMMARY
 

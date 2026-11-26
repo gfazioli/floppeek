@@ -3,8 +3,8 @@
 //   swift scripts/icon.swift <concept> <size> <out.png> [--square]
 //   swift scripts/icon.swift sheet <out.png>
 //
-// Concepts: workbench, copper, pixel. Run from the repository root (the Topaz font is
-// read from Resources/Fonts). Without --square the tile is clipped to the squircle at
+// Concepts: workbench, copper, pixel. The Topaz font is read from Resources/Fonts,
+// found from this file's own path. Without --square the tile is clipped to the squircle at
 // full bleed, the shape the family's icons ship (Netfox, FinderGit and Lancetta touch
 // all four edges); --square keeps the corners, for the macOS 26+ .icon layer, which
 // the system masks to its own shape.
@@ -29,15 +29,18 @@ struct RGB {
 let blue = RGB(0x0055AA), black = RGB(0x000022), orange = RGB(0xFF8800), white = RGB(0xFFFFFF)
 let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
 
+// The repository, from this file's path: right whether the script is interpreted or
+// compiled (icons.sh compiles it once), whatever the working directory.
+let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+
 let topaz: String = {
-    let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        .appendingPathComponent("Resources/Fonts/Topaz_a1200_v1.0.ttf")
+    let url = repository.appendingPathComponent("Resources/Fonts/Topaz_a1200_v1.0.ttf")
     CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
     if let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
        let name = descriptors.first.flatMap({ CTFontDescriptorCopyAttribute($0, kCTFontNameAttribute) as? String }) {
         return name
     }
-    fputs("icon.swift: Topaz not found, run from the repository root\n", stderr)
+    fputs("icon.swift: no Topaz at \(url.path)\n", stderr)
     return "Menlo"
 }()
 
@@ -106,7 +109,9 @@ func eye(_ ctx: CGContext, in r: CGRect, stroke: CGFloat) {
 }
 
 /// A 3.5" floppy, 90 x 94 mm, centred on `centre`, `width` wide, rotated by `angle`.
-/// `label` draws on the label, in the floppy's own coordinates.
+/// `label` draws on the label, in the floppy's own coordinates. Not FloppyIcon (the
+/// Finder thumbnail, in FloppeekUI, which a script cannot import): the icon has
+/// gradients, a shadow and a tilt the flat thumbnail does not.
 func floppy(_ ctx: CGContext, centre: CGPoint, width: CGFloat, angle: CGFloat, body: RGB, highlight: CGFloat,
             label: (CGContext, CGRect, CGFloat) -> Void) {
     ctx.saveGState()
@@ -154,11 +159,10 @@ func floppy(_ ctx: CGContext, centre: CGPoint, width: CGFloat, angle: CGFloat, b
     ctx.addPath(CGPath(roundedRect: box(4, 4, 6, 6), cornerWidth: 0.8 * mm, cornerHeight: 0.8 * mm, transform: nil))
     ctx.setFillColor(RGB(0x000000, 0.7).cg); ctx.fillPath()
     // The label, its orange band, and whatever it carries.
-    let paper = box(12, 4, 70, 50)
-    ctx.addPath(CGPath(roundedRect: paper, cornerWidth: 1.6 * mm, cornerHeight: 1.6 * mm, transform: nil))
-    ctx.setFillColor(white.cg); ctx.fillPath()
+    let paper = CGPath(roundedRect: box(12, 4, 70, 50), cornerWidth: 1.6 * mm, cornerHeight: 1.6 * mm, transform: nil)
+    ctx.addPath(paper); ctx.setFillColor(white.cg); ctx.fillPath()
     ctx.saveGState()
-    ctx.addPath(CGPath(roundedRect: paper, cornerWidth: 1.6 * mm, cornerHeight: 1.6 * mm, transform: nil)); ctx.clip()
+    ctx.addPath(paper); ctx.clip()
     ctx.setFillColor(orange.cg); ctx.fill(box(12, 46, 70, 8))
     ctx.restoreGState()
     label(ctx, box(14, 6, 66, 38), mm)
@@ -295,13 +299,13 @@ if args.first == "sheet", args.count == 2 {
         ctx.setFillColor(RGB(0x1E1E1E).cg); ctx.fill(CGRect(x: 1000, y: top - CGFloat(rowHeight), width: 500, height: CGFloat(rowHeight)))
         ctx.draw(render(512, square: false, draw), in: CGRect(x: 24, y: top - 556, width: 512, height: 512))
         text(ctx, "\(index + 1). \(name)", size: 28, colour: black, centre: CGPoint(x: 280, y: top - 24))
-        for (ground, x0) in [(0, 560), (1, 1024)] {
-            _ = ground
-            var x = CGFloat(x0), y = top - 330
-            for size in [256, 128, 64, 32, 16] {
-                if size == 256 { ctx.draw(render(size, square: false, draw), in: CGRect(x: x, y: top - 300, width: 256, height: 256)); y = top - 520; x = CGFloat(x0); continue }
-                ctx.draw(render(size, square: false, draw), in: CGRect(x: x, y: y + CGFloat(128 - size) / 2, width: CGFloat(size), height: CGFloat(size)))
-                x += CGFloat(size) + 24
+        // 256 on top, then 128 to 16 in a row, centred on one line; light ground, then dark.
+        for x0 in [CGFloat(560), 1024] {
+            ctx.draw(render(256, square: false, draw), in: CGRect(x: x0, y: top - 300, width: 256, height: 256))
+            var x = x0
+            for size in [128, 64, 32, 16].map({ CGFloat($0) }) {
+                ctx.draw(render(Int(size), square: false, draw), in: CGRect(x: x, y: top - 456 - size / 2, width: size, height: size))
+                x += size + 24
             }
         }
     }
