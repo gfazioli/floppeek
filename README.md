@@ -11,6 +11,13 @@
 ![macOS](https://img.shields.io/badge/macOS-15%2B-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+**[Visit the website](https://gfazioli.github.io/floppeek/)**: the download, the release notes and how it works, on one page.
+
+</div>
+
+<div align="center">
+  <p><img src="https://raw.githubusercontent.com/gfazioli/gfazioli/master/glancecard/floppeek.svg" width="880" alt="floppeek at a glance, refreshed daily: commits, releases, stars, issues and pull requests, a year of commit activity, the weekly rhythm, languages, latest commits and releases, contributors" /><br>
+  <sub>Made with <a href="https://github.com/gfazioli/glancecard">glancecard</a> · refreshed daily</sub></p>
 </div>
 
 <p align="center">
@@ -102,7 +109,7 @@ scripts/release.sh --dry-run    # the notarized DMG, publishing nothing
 
 <div align="center">
 
-[<kbd> <br/> ❤️ If Floppeek brought an old disk back to life for you, please consider becoming a sponsor <br/> </kbd>](https://github.com/sponsors/gfazioli?o=esc)
+[<kbd> <br/> ❤️ If Floppeek brought an old disk back to life for you, please consider becoming a sponsor <br/> </kbd>](https://github.com/sponsors/gfazioli?o=esc)
 
 </div>
 
