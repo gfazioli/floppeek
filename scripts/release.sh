@@ -58,7 +58,15 @@ say "Pre-flight: Floppeek $VERSION ($MODE)"
 
 mkdir -p "$DIST"
 # The section of CHANGELOG.md under "## <version>", up to the next "## ".
-awk -v v="$VERSION" '$0 ~ "^## " { if (f) exit; if ($2 == v) { f = 1; next } } f' "$ROOT/CHANGELOG.md" \
+# GitHub keeps every newline of a release body as a line break, so the changelog's
+# wrapped lines are joined: a bullet or a paragraph becomes one line. (No code blocks
+# in the notes: their lines would be joined too.) Versions compare as strings: as
+# numbers, 1.10 would find "## 1.1".
+awk -v v="$VERSION" '$0 ~ "^## " { if (f) exit; if ($2 "" == v "") { f = 1; next } } f' "$ROOT/CHANGELOG.md" \
+    | awk '/^[[:space:]]*$/ { if (line != "") print line; line = ""; print ""; next }
+           /^(- |\* |[0-9]+\. |#)/ { if (line != "") print line; line = $0; next }
+           { sub(/^[[:space:]]+/, ""); line = (line == "" ? $0 : line " " $0) }
+           END { if (line != "") print line }' \
     | sed -e '/./,$!d' > "$NOTES"
 [ -s "$NOTES" ] || die "CHANGELOG.md has no section '## $VERSION'"
 echo "  notes:    CHANGELOG.md, $(wc -l < "$NOTES" | tr -d ' ') lines"
@@ -130,13 +138,20 @@ done
 codesign -dv --verbose=2 "$APP" 2>&1 | grep -E 'Authority=Developer ID Application|TeamIdentifier|flags' | sed 's/^/  /'
 
 # ── Notarize the app, then the DMG ──────────────────────────────────────────
+# The verdict is read from the submission's own answer, not the exit code (`--wait`
+# can end well on a submission Apple found Invalid), and its log is this submission's,
+# not the profile's latest, which on a shared profile may be another app's.
 notarize() {
-    if ! xcrun notarytool submit "$1" --keychain-profile "$NOTARY_PROFILE" --wait; then
-        local last
-        last=$(xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" --output-format json \
-               | python3 -c 'import json,sys; print(json.load(sys.stdin)["history"][0]["id"])')
-        xcrun notarytool log "$last" --keychain-profile "$NOTARY_PROFILE" >&2 || true
-        die "notarization refused $(basename "$1")"
+    local answer
+    local status
+    local id
+    answer=$(xcrun notarytool submit "$1" --keychain-profile "$NOTARY_PROFILE" --wait --output-format json) || true
+    status=$(echo "$answer" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)
+    id=$(echo "$answer" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' 2>/dev/null || true)
+    echo "  $(basename "$1"): ${status:-no answer}${id:+ ($id)}"
+    if [ "$status" != Accepted ]; then
+        [ -z "$id" ] || xcrun notarytool log "$id" --keychain-profile "$NOTARY_PROFILE" >&2 || true
+        die "notarization did not accept $(basename "$1"): ${answer:-no answer from notarytool}"
     fi
 }
 
@@ -161,8 +176,11 @@ xcrun stapler staple "$DMG"
 xcrun stapler validate "$DMG"
 
 say "Gatekeeper, as a stranger's Mac sees the download"
-spctl --assess --verbose=4 --type install "$DMG" 2>&1 | sed 's/^/  /'
-spctl --assess --type install "$DMG" 2>/dev/null || die "Gatekeeper rejects the DMG"
+if ! verdict=$(spctl --assess --verbose=4 --type install "$DMG" 2>&1); then
+    echo "$verdict" >&2
+    die "Gatekeeper rejects the DMG"
+fi
+echo "$verdict" | sed 's/^/  /'
 
 SHA=$(shasum -a 256 "$DMG" | cut -d' ' -f1)
 SIZE=$(stat -f%z "$DMG")
@@ -189,8 +207,8 @@ recover() {
         tag) echo "release.sh: the tag $TAG is pushed and there is no Release. Retry with:" >&2
              echo "  gh release create $TAG '$DMG' -R $REPO --verify-tag --title 'Floppeek $VERSION' --notes-file '$NOTES'" >&2
              echo "or take the tag back: git push origin :refs/tags/$TAG && git tag -d $TAG" >&2 ;;
-        release) echo "release.sh: the Release $TAG is out and the cask is not. Write Casks/floppeek.rb in $TAP" >&2
-                 echo "from scripts/floppeek.rb with version $VERSION and sha256 $SHA." >&2 ;;
+        release) echo "release.sh: the Release $TAG is out and the cask is not. Check the DMG it serves" >&2
+                 echo "(sha256 $SHA expected), then write Casks/floppeek.rb in $TAP from scripts/floppeek.rb." >&2 ;;
     esac
 }
 trap recover EXIT
@@ -202,6 +220,7 @@ STEP=tag
 
 say "GitHub Release on $REPO"
 gh release create "$TAG" "$DMG" -R "$REPO" --verify-tag --title "Floppeek $VERSION" --notes-file "$NOTES"
+STEP=release
 # The asset as GitHub serves it, byte for byte: what the cask's sha256 is checked against.
 CHECK="$(mktemp -d)"
 gh release download "$TAG" -R "$REPO" -p "Floppeek-$VERSION.dmg" -D "$CHECK"
@@ -209,7 +228,6 @@ REMOTE=$(shasum -a 256 "$CHECK/Floppeek-$VERSION.dmg" | cut -d' ' -f1)
 trash "$CHECK"
 [ "$REMOTE" = "$SHA" ] || die "the DMG GitHub serves hashes to $REMOTE, not $SHA: no cask written"
 echo "  $(gh release view "$TAG" -R "$REPO" --json url --jq .url)"
-STEP=release
 
 say "Cask in $TAP"
 TAPDIR="$(mktemp -d)"
