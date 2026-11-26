@@ -31,7 +31,8 @@ mkdir -p "$OUT"
 APP=""
 for part in Preview Thumbnail; do
     line=$(pluginkit -m -v -i "com.gfazioli.Floppeek.$part" | head -1)
-    [ -n "$line" ] || { echo "shoot.sh: Floppeek $part is not registered (scripts/bundle.sh --register)" >&2; exit 1; }
+    # pluginkit answers " (no matches)", and exits 0, for an extension it does not know.
+    case "$line" in *.appex) ;; *) echo "shoot.sh: Floppeek $part is not registered (scripts/bundle.sh --register)" >&2; exit 1 ;; esac
     echo "  $part: ${line##*$'\t'}"
     APP="${APP:-$(echo "$line" | sed -E 's|.*\t(/.*\.app)/Contents/PlugIns/.*|\1|')}"
 done
@@ -60,7 +61,7 @@ settle() {
 if want finder; then
     # The window is a throwaway volume's, laid out by dmgbuild (why: window.py's header),
     # with the DMG builder's own environment.
-    DMGBUILD=$(ls -d "$HOME"/Library/Caches/com.gfazioli.Floppeek.release-tools/dmgbuild-*/bin/dmgbuild 2>/dev/null | tail -1)
+    DMGBUILD=$(ls -d "$HOME"/Library/Caches/com.gfazioli.Floppeek.release-tools/dmgbuild-*/bin/dmgbuild 2>/dev/null | tail -1 || true)
     [ -n "$DMGBUILD" ] || { echo "shoot.sh: no dmgbuild; run scripts/release.sh --dry-run once" >&2; exit 1; }
     VOLUME="/Volumes/Amiga Disks"
     [ ! -e "$VOLUME" ] || { echo "shoot.sh: $VOLUME is already mounted; eject it first" >&2; exit 1; }
